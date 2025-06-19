@@ -1,4 +1,21 @@
-import streamlit as st
+# 구분선 추가 함수
+def add_section_divider(title=""):
+    if title:
+        st.markdown(f"""
+        <div style="margin: 2rem 0 1.5rem 0;">
+            <div style="border-top: 2px solid #667eea; padding-top: 1rem;">
+                <h3 style="color: #667eea; margin: 0; font-size: 1.3rem; font-weight: 600;">
+                    {title}
+                </h3>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div style="margin: 2rem 0;">
+            <div style="border-top: 1px solid #404040;"></div>
+        </div>
+        """, unsafe_allow_html=True)import streamlit as st
 from bs4 import BeautifulSoup
 import pandas as pd
 from datetime import datetime
@@ -377,13 +394,13 @@ def load_keywords_from_sheet(conn):
         st.error(f"❌ 구글시트 연결 오류: {e}")
         return pd.DataFrame()
 
-def update_keyword_usage(conn, index, used_status, memo=""):
-    """키워드 사용여부 업데이트"""
+def update_keyword_usage(conn, original_index, used_status, memo=""):
+    """키워드 사용여부 업데이트 (인덱스 문제 해결)"""
     if not conn:
         return False
     
     try:
-        # 여러 시트 이름 시도
+        # 원본 데이터 읽기
         sheet_names = ["키워드관리", "Sheet1", "시트1", None]
         
         for sheet_name in sheet_names:
@@ -393,13 +410,13 @@ def update_keyword_usage(conn, index, used_status, memo=""):
                 else:
                     df = conn.read()
                 
-                if not df.empty and '키워드' in df.columns and index < len(df):
+                if not df.empty and '키워드' in df.columns and original_index < len(df):
                     # 사용여부 업데이트
-                    df.loc[index, '사용여부'] = '✅' if used_status else '❌'
+                    df.loc[original_index, '사용여부'] = '✅' if used_status else '❌'
                     
                     # 메모 업데이트
                     if memo:
-                        df.loc[index, '메모'] = memo
+                        df.loc[original_index, '메모'] = memo
                     
                     # 구글시트에 업데이트
                     if sheet_name:
@@ -425,7 +442,6 @@ def initialize_session_state():
         'selected_keywords': [],
         'saved_keywords_df': pd.DataFrame(),
         'extraction_count': 0,
-        'total_saved': 0,
         'session_start': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
     
@@ -437,58 +453,56 @@ initialize_session_state()
 
 # ---------------- 메인 UI ----------------
 
-# 헤더 영역
-st.markdown("""
-<div class="main-header">
-    <div class="main-title">🔍 키워드 추출 & 관리 도구</div>
-    <div class="main-subtitle">HTML에서 키워드를 추출하고 구글시트로 체계적으로 관리하세요</div>
-</div>
-""", unsafe_allow_html=True)
+# 헤더 영역 (통계를 오른쪽 상단에 작게 배치)
+header_col1, header_col2 = st.columns([3, 1])
 
-# 통계 카드
-keywords_count = len(st.session_state.get('keywords_list', []))
-selected_count = len(st.session_state.get('selected_keywords', []))
-total_saved = len(st.session_state.get('saved_keywords_df', pd.DataFrame()))
+with header_col1:
+    st.markdown("""
+    <div style="margin-bottom: 2rem;">
+        <div style="font-size: 3rem; font-weight: 700; color: #ffffff; margin-bottom: 1rem; 
+                    letter-spacing: -0.02em; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+            🔍 키워드 추출 & 관리 도구
+        </div>
+        <div style="font-size: 1.2rem; color: #b0b0b0; font-weight: 400; line-height: 1.6;">
+            HTML에서 키워드를 추출하고 구글시트로 체계적으로 관리하세요
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-st.markdown(f"""
-<div class="stats-grid">
-    <div class="stat-card">
-        <span class="stat-number">{keywords_count}</span>
-        <div class="stat-label">추출된 키워드</div>
-    </div>
-    <div class="stat-card">
-        <span class="stat-number">{selected_count}</span>
-        <div class="stat-label">선택된 키워드</div>
-    </div>
-    <div class="stat-card">
-        <span class="stat-number">{total_saved}</span>
-        <div class="stat-label">총 저장된 키워드</div>
-    </div>
-    <div class="stat-card">
-        <span class="stat-number">{st.session_state['extraction_count']}</span>
-        <div class="stat-label">추출 작업 횟수</div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-# 구글시트 연결 확인
+# 구글시트 연결하고 저장된 키워드 수 실시간 확인
 conn = get_google_sheet_connection()
 if conn:
-    st.markdown("""
-    <div class="success-message">
-        ✅ 구글시트가 성공적으로 연결되었습니다!
-    </div>
-    """, unsafe_allow_html=True)
+    current_saved_df = load_keywords_from_sheet(conn)
+    total_saved = len(current_saved_df) if not current_saved_df.empty else 0
 else:
-    st.markdown("""
-    <div class="warning-message">
-        ⚠️ 구글시트 연결을 확인해주세요. secrets.toml 파일에 인증 정보가 설정되어 있나요?
+    total_saved = 0
+
+with header_col2:
+    # 통계 정보를 오른쪽 상단에 작게 표시
+    keywords_count = len(st.session_state.get('keywords_list', []))
+    
+    st.markdown(f"""
+    <div style="text-align: right; margin-top: 1rem;">
+        <div style="background: #2a2a2a; border-radius: 12px; padding: 1rem; border: 1px solid #333333; margin-bottom: 0.5rem;">
+            <div style="font-size: 1.5rem; font-weight: 800; color: #667eea; margin-bottom: 0.3rem;">{keywords_count}</div>
+            <div style="font-size: 0.8rem; color: #b0b0b0;">추출된 키워드</div>
+        </div>
+        <div style="background: #2a2a2a; border-radius: 12px; padding: 1rem; border: 1px solid #333333;">
+            <div style="font-size: 1.5rem; font-weight: 800; color: #667eea; margin-bottom: 0.3rem;">{total_saved}</div>
+            <div style="font-size: 0.8rem; color: #b0b0b0;">총 저장된 키워드</div>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
+# 구글시트 연결 상태 표시
+if conn:
+    st.success("✅ 구글시트가 성공적으로 연결되었습니다!")
+else:
+    st.warning("⚠️ 구글시트 연결을 확인해주세요. secrets.toml 파일에 인증 정보가 설정되어 있나요?")
+
 # 1. 키워드 추출 섹션
-st.markdown('<div class="content-card">', unsafe_allow_html=True)
-st.markdown('<div class="card-title"><span class="emoji">🔍</span>HTML 소스 분석</div>', unsafe_allow_html=True)
+add_section_divider("🔍 HTML 소스 분석")
 
 html_input = st.text_area(
     "웹사이트 페이지 소스를 붙여넣으세요",
@@ -508,34 +522,16 @@ with col1:
                 st.session_state['extraction_count'] += 1
             
             if st.session_state['keywords_list']:
-                st.markdown(f"""
-                <div class="success-message">
-                    ✅ 키워드 추출 완료! (총 {len(st.session_state['keywords_list'])}개)
-                </div>
-                """, unsafe_allow_html=True)
+                st.success(f"✅ 키워드 추출 완료! (총 {len(st.session_state['keywords_list'])}개)")
                 st.rerun()
             else:
-                st.markdown("""
-                <div class="warning-message">
-                    ⚠️ 키워드를 찾지 못했습니다. HTML 소스를 확인해주세요.
-                </div>
-                """, unsafe_allow_html=True)
+                st.warning("⚠️ 키워드를 찾지 못했습니다. HTML 소스를 확인해주세요.")
         else:
-            st.markdown("""
-            <div class="error-message">
-                ❌ HTML 소스를 입력해주세요.
-            </div>
-            """, unsafe_allow_html=True)
+            st.error("❌ HTML 소스를 입력해주세요.")
 
 with col2:
     if st.session_state.get('keywords_list'):
-        st.markdown(f"""
-        <div class="info-message">
-            💡 {len(st.session_state['keywords_list'])}개 키워드 발견!
-        </div>
-        """, unsafe_allow_html=True)
-
-st.markdown('</div>', unsafe_allow_html=True)
+        st.info(f"💡 {len(st.session_state['keywords_list'])}개 키워드 발견!")
 
 # 2. 키워드 선택 섹션
 if st.session_state.get('keywords_list'):
@@ -593,8 +589,7 @@ if st.session_state.get('keywords_list'):
 
 # 3. 저장 섹션
 if st.session_state.get('selected_keywords') and conn:
-    st.markdown('<div class="content-card">', unsafe_allow_html=True)
-    st.markdown('<div class="card-title"><span class="emoji">💾</span>구글시트에 저장</div>', unsafe_allow_html=True)
+    add_section_divider("💾 구글시트에 저장")
     
     col1, col2 = st.columns([2, 1])
     
@@ -613,27 +608,14 @@ if st.session_state.get('selected_keywords') and conn:
                 
                 if success:
                     saved_sheet = st.session_state.get('last_saved_sheet', '구글시트')
-                    st.markdown(f"""
-                    <div class="success-message">
-                        ✅ {len(st.session_state['selected_keywords'])}개 키워드가 성공적으로 저장되었습니다!<br>
-                        📁 저장 위치: {saved_sheet}
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.success(f"✅ {len(st.session_state['selected_keywords'])}개 키워드가 성공적으로 저장되었습니다! (저장 위치: {saved_sheet})")
                     # 저장 후 선택 해제
                     st.session_state['selected_keywords'] = []
                     st.rerun()
                 else:
-                    st.markdown("""
-                    <div class="error-message">
-                        ❌ 저장 중 오류가 발생했습니다.
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.error("❌ 저장 중 오류가 발생했습니다.")
             else:
-                st.markdown("""
-                <div class="warning-message">
-                    ⚠️ 프로젝트명을 입력해주세요.
-                </div>
-                """, unsafe_allow_html=True)
+                st.warning("⚠️ 프로젝트명을 입력해주세요.")
     
     # 선택된 키워드 미리보기
     if st.session_state.get('selected_keywords'):
@@ -645,8 +627,6 @@ if st.session_state.get('selected_keywords') and conn:
             height=100,
             help="저장할 키워드 목록입니다"
         )
-    
-    st.markdown('</div>', unsafe_allow_html=True)
 
 # 4. 저장된 키워드 관리 섹션
 if conn:
@@ -804,10 +784,10 @@ if conn:
     st.markdown('</div>', unsafe_allow_html=True)
 
 # 푸터
-st.markdown("---")
+add_section_divider()
 st.markdown("""
-<div style="text-align: center; padding: 3rem 0; color: #808080;">
-    <p style="font-size: 1.2rem; margin-bottom: 0.5rem; font-weight: 600;">🔍 키워드 추출 & 관리 도구</p>
-    <p style="font-size: 1rem; margin: 0;">HTML에서 키워드를 추출하고 구글시트로 체계적으로 관리하세요!</p>
+<div style="text-align: center; padding: 2rem 0; color: #808080;">
+    <p style="font-size: 1.1rem; margin-bottom: 0.5rem; font-weight: 600;">🔍 키워드 추출 & 관리 도구</p>
+    <p style="font-size: 0.9rem; margin: 0;">HTML에서 키워드를 추출하고 구글시트로 체계적으로 관리하세요!</p>
 </div>
 """, unsafe_allow_html=True)
