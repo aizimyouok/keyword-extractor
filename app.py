@@ -305,17 +305,40 @@ def save_keywords_to_sheet(conn, project_name, keywords_list):
         # 데이터프레임으로 변환
         new_df = pd.DataFrame(new_data)
         
-        # 기존 데이터 읽기
-        try:
-            existing_df = conn.read(worksheet="키워드관리")
-            # 새 데이터를 기존 데이터에 추가
+        # 기존 데이터 읽기 시도
+        existing_df = pd.DataFrame()
+        sheet_names = ["키워드관리", "Sheet1", "시트1", None]
+        used_sheet_name = None
+        
+        for sheet_name in sheet_names:
+            try:
+                if sheet_name:
+                    existing_df = conn.read(worksheet=sheet_name)
+                else:
+                    existing_df = conn.read()
+                
+                if not existing_df.empty:
+                    used_sheet_name = sheet_name
+                    break
+                    
+            except:
+                continue
+        
+        # 기존 데이터와 병합
+        if not existing_df.empty:
             updated_df = pd.concat([existing_df, new_df], ignore_index=True)
-        except:
-            # 시트가 없거나 비어있는 경우 새로 생성
+        else:
             updated_df = new_df
+            used_sheet_name = "Sheet1"  # 기본 시트 이름
         
         # 업데이트
-        conn.update(worksheet="키워드관리", data=updated_df)
+        if used_sheet_name:
+            conn.update(worksheet=used_sheet_name, data=updated_df)
+            st.session_state['last_saved_sheet'] = used_sheet_name
+        else:
+            conn.update(data=updated_df)
+            st.session_state['last_saved_sheet'] = "기본 시트"
+            
         return True
         
     except Exception as e:
@@ -328,10 +351,30 @@ def load_keywords_from_sheet(conn):
         return pd.DataFrame()
     
     try:
-        df = conn.read(worksheet="키워드관리")
-        return df
+        # 여러 시트 이름 시도
+        sheet_names = ["키워드관리", "Sheet1", "시트1", None]  # None은 첫 번째 시트
+        
+        for sheet_name in sheet_names:
+            try:
+                if sheet_name:
+                    df = conn.read(worksheet=sheet_name)
+                else:
+                    df = conn.read()  # 첫 번째 시트 읽기
+                
+                # 데이터가 있고 필요한 컬럼이 있는지 확인
+                if not df.empty and '키워드' in df.columns:
+                    st.success(f"✅ 시트 '{sheet_name or '첫번째 시트'}'에서 데이터를 불러왔습니다!")
+                    return df
+                    
+            except Exception as sheet_error:
+                continue
+        
+        # 모든 시트에서 실패한 경우
+        st.warning("⚠️ 키워드 데이터를 찾을 수 없습니다. 구글시트를 확인해주세요.")
+        return pd.DataFrame()
+        
     except Exception as e:
-        st.warning(f"저장된 키워드를 불러올 수 없습니다: {e}")
+        st.error(f"❌ 구글시트 연결 오류: {e}")
         return pd.DataFrame()
 
 def update_keyword_usage(conn, index, used_status, memo=""):
@@ -340,17 +383,39 @@ def update_keyword_usage(conn, index, used_status, memo=""):
         return False
     
     try:
-        df = conn.read(worksheet="키워드관리")
-        if index < len(df):
-            df.loc[index, '사용여부'] = '✅' if used_status else '❌'
-            if memo:
-                df.loc[index, '메모'] = memo
-            
-            conn.update(worksheet="키워드관리", data=df)
-            return True
+        # 여러 시트 이름 시도
+        sheet_names = ["키워드관리", "Sheet1", "시트1", None]
+        
+        for sheet_name in sheet_names:
+            try:
+                if sheet_name:
+                    df = conn.read(worksheet=sheet_name)
+                else:
+                    df = conn.read()
+                
+                if not df.empty and '키워드' in df.columns and index < len(df):
+                    # 사용여부 업데이트
+                    df.loc[index, '사용여부'] = '✅' if used_status else '❌'
+                    
+                    # 메모 업데이트
+                    if memo:
+                        df.loc[index, '메모'] = memo
+                    
+                    # 구글시트에 업데이트
+                    if sheet_name:
+                        conn.update(worksheet=sheet_name, data=df)
+                    else:
+                        conn.update(data=df)
+                    
+                    return True
+                    
+            except Exception as sheet_error:
+                continue
+                
         return False
+        
     except Exception as e:
-        st.error(f"사용여부 업데이트 실패: {e}")
+        st.error(f"❌ 사용여부 업데이트 실패: {e}")
         return False
 
 # ---------------- 세션 상태 초기화 ----------------
@@ -547,9 +612,11 @@ if st.session_state.get('selected_keywords') and conn:
                     success = save_keywords_to_sheet(conn, project_name, st.session_state['selected_keywords'])
                 
                 if success:
+                    saved_sheet = st.session_state.get('last_saved_sheet', '구글시트')
                     st.markdown(f"""
                     <div class="success-message">
-                        ✅ {len(st.session_state['selected_keywords'])}개 키워드가 성공적으로 저장되었습니다!
+                        ✅ {len(st.session_state['selected_keywords'])}개 키워드가 성공적으로 저장되었습니다!<br>
+                        📁 저장 위치: {saved_sheet}
                     </div>
                     """, unsafe_allow_html=True)
                     # 저장 후 선택 해제
@@ -586,14 +653,37 @@ if conn:
     st.markdown('<div class="content-card">', unsafe_allow_html=True)
     st.markdown('<div class="card-title"><span class="emoji">📊</span>저장된 키워드 관리</div>', unsafe_allow_html=True)
     
-    # 새로고침 버튼
-    col1, col2 = st.columns([3, 1])
-    with col2:
+    # 새로고침 버튼과 디버그 정보
+    col1, col2, col3 = st.columns([2, 1, 1])
+    with col1:
         if st.button("🔄 새로고침", use_container_width=True):
             st.rerun()
     
+    with col2:
+        if st.button("🔍 연결 테스트", use_container_width=True):
+            if conn:
+                try:
+                    # 모든 시트 정보 확인
+                    test_df = conn.read()
+                    st.success(f"✅ 연결 성공! {len(test_df)}개 행 발견")
+                    st.info(f"컬럼: {list(test_df.columns) if not test_df.empty else '없음'}")
+                except Exception as e:
+                    st.error(f"❌ 연결 실패: {e}")
+            else:
+                st.error("❌ 구글시트 연결이 안되어 있습니다")
+    
+    with col3:
+        debug_mode = st.checkbox("🐛 디버그 모드")
+    
     # 저장된 키워드 불러오기
     saved_df = load_keywords_from_sheet(conn)
+    
+    if debug_mode and not saved_df.empty:
+        st.markdown("#### 🐛 디버그 정보")
+        st.write(f"**데이터 형태**: {saved_df.shape}")
+        st.write(f"**컬럼명**: {list(saved_df.columns)}")
+        st.write(f"**데이터 타입**: {saved_df.dtypes.to_dict()}")
+        st.dataframe(saved_df.head(3), use_container_width=True)
     
     if not saved_df.empty:
         st.session_state['saved_keywords_df'] = saved_df
@@ -634,43 +724,63 @@ if conn:
             filtered_df = filtered_df[filtered_df['사용여부'] == '❌']
         
         # 키워드 목록 표시 (편집 가능)
-        st.markdown("#### 📝 키워드 목록 (사용여부 클릭으로 변경 가능)")
+        st.markdown("#### 📝 키워드 목록")
         
-        for idx, row in filtered_df.iterrows():
-            col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 2])
-            
-            with col1:
-                st.write(f"**{row['키워드']}**")
-            
-            with col2:
-                st.write(row['프로젝트명'])
-            
-            with col3:
-                current_status = row['사용여부'] == '✅'
-                if st.button(
-                    row['사용여부'], 
-                    key=f"status_{idx}",
-                    help="클릭하여 사용여부 변경"
-                ):
-                    new_status = not current_status
-                    if update_keyword_usage(conn, idx, new_status):
-                        st.success("✅ 사용여부가 업데이트되었습니다!")
-                        st.rerun()
-            
-            with col4:
-                st.write(row['날짜'].split()[0] if ' ' in str(row['날짜']) else row['날짜'])
-            
-            with col5:
-                memo = st.text_input(
-                    "메모", 
-                    value=row.get('메모', ''),
-                    key=f"memo_{idx}",
-                    placeholder="메모 입력..."
-                )
-                if st.button("💾", key=f"save_memo_{idx}", help="메모 저장"):
-                    if update_keyword_usage(conn, idx, row['사용여부'] == '✅', memo):
-                        st.success("메모가 저장되었습니다!")
-                        st.rerun()
+        if not filtered_df.empty:
+            # 키워드별로 카드 형태로 표시
+            for idx, row in filtered_df.iterrows():
+                with st.container():
+                    # 카드 스타일 컨테이너
+                    st.markdown('<div style="background: #333333; padding: 1.5rem; border-radius: 12px; margin-bottom: 1rem; border: 1px solid #404040;">', unsafe_allow_html=True)
+                    
+                    col1, col2, col3, col4 = st.columns([3, 2, 1, 1])
+                    
+                    with col1:
+                        st.markdown(f"**🔑 {row['키워드']}**")
+                        st.caption(f"📁 {row['프로젝트명']} | 📅 {str(row['날짜']).split()[0] if ' ' in str(row['날짜']) else row['날짜']}")
+                    
+                    with col2:
+                        # 메모 입력
+                        current_memo = row.get('메모', '')
+                        new_memo = st.text_input(
+                            "메모", 
+                            value=current_memo,
+                            key=f"memo_input_{idx}",
+                            placeholder="메모를 입력하세요..."
+                        )
+                    
+                    with col3:
+                        # 사용여부 토글
+                        current_status = row['사용여부'] == '✅'
+                        new_status = st.checkbox(
+                            "사용완료",
+                            value=current_status,
+                            key=f"status_check_{idx}"
+                        )
+                    
+                    with col4:
+                        # 저장 버튼
+                        if st.button("💾 저장", key=f"save_btn_{idx}", use_container_width=True):
+                            # 변경사항이 있으면 업데이트
+                            if new_status != current_status or new_memo != current_memo:
+                                success = update_keyword_usage(conn, idx, new_status, new_memo)
+                                if success:
+                                    st.success("✅ 업데이트 완료!")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error("❌ 업데이트 실패")
+                            else:
+                                st.info("변경사항이 없습니다.")
+                    
+                    st.markdown('</div>', unsafe_allow_html=True)
+        
+        else:
+            st.markdown("""
+            <div class="info-message">
+                📝 필터 조건에 맞는 키워드가 없습니다.
+            </div>
+            """, unsafe_allow_html=True)
         
         # 데이터프레임으로도 표시
         st.markdown("#### 📊 전체 데이터")
@@ -683,7 +793,11 @@ if conn:
     else:
         st.markdown("""
         <div class="info-message">
-            📝 아직 저장된 키워드가 없습니다. 키워드를 추출하고 저장해보세요!
+            📝 아직 저장된 키워드가 없습니다. 키워드를 추출하고 저장해보세요!<br><br>
+            💡 <strong>저장된 키워드가 안 보인다면:</strong><br>
+            • 구글시트에 데이터가 있는지 확인해보세요<br>
+            • 새로고침 버튼을 눌러보세요<br>
+            • 구글시트의 시트 이름을 확인해보세요 (권장: "키워드관리")
         </div>
         """, unsafe_allow_html=True)
     
