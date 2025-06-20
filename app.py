@@ -937,137 +937,268 @@ if conn:
         
         # 키워드 목록을 토글로 표시
         if show_keywords:
-            # 필터링 옵션 - 더 자연스럽게 스타일링
+            # 통합 검색 및 필터 시스템
             st.markdown("""
             <div style="background: #2a2a2a; padding: 1.5rem; border-radius: 12px; margin: 1rem 0; border: 1px solid #333333;">
-                <h4 style="color: #667eea; margin: 0 0 1rem 0; font-size: 1.1rem;">🔍 필터 옵션</h4>
+                <h4 style="color: #667eea; margin: 0 0 1rem 0; font-size: 1.1rem;">🔍 통합 검색 & 필터</h4>
             </div>
             """, unsafe_allow_html=True)
             
-            col1, col2, col3 = st.columns(3)
+            # 통합 검색창
+            search_query = st.text_input(
+                "🔍 통합 검색",
+                placeholder="키워드명, 프로젝트명, 메모에서 검색...",
+                help="모든 필드에서 검색됩니다"
+            )
             
-            with col1:
+            # 필터 옵션들
+            filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(4)
+            
+            with filter_col1:
                 projects = ['전체'] + list(saved_df['프로젝트명'].unique())
-                selected_project = st.selectbox("📁 프로젝트", projects, label_visibility="visible")
+                selected_project = st.selectbox("📁 프로젝트", projects)
             
-            with col2:
-                usage_filter = st.selectbox("✅ 사용여부", ['전체', '사용함(✅)', '미사용(❌)'], label_visibility="visible")
+            with filter_col2:
+                usage_filter = st.selectbox("✅ 사용여부", ['전체', '사용함(✅)', '미사용(❌)'])
             
-            with col3:
-                if st.button("📊 통계 보기", use_container_width=True):
-                    total_keywords = len(saved_df)
-                    used_keywords = len(saved_df[saved_df['사용여부'] == '✅'])
-                    usage_rate = (used_keywords / total_keywords * 100) if total_keywords > 0 else 0
-                    
-                    st.info(f"📈 전체: {total_keywords}개 | ✅ 사용: {used_keywords}개 | 📊 사용률: {usage_rate:.1f}%")
+            with filter_col3:
+                # 날짜 필터
+                date_filter = st.selectbox("📅 등록일", ['전체', '오늘', '최근 3일', '최근 일주일', '최근 한달'])
+            
+            with filter_col4:
+                # 정렬 옵션
+                sort_option = st.selectbox("🔄 정렬", ['최신순', '오래된순', '키워드명 순', '프로젝트명 순'])
             
             # 필터 적용
             filtered_df = saved_df.copy()
             
+            # 검색어 필터
+            if search_query:
+                search_mask = (
+                    filtered_df['키워드'].str.contains(search_query, case=False, na=False) |
+                    filtered_df['프로젝트명'].str.contains(search_query, case=False, na=False) |
+                    filtered_df['메모'].str.contains(search_query, case=False, na=False)
+                )
+                filtered_df = filtered_df[search_mask]
+            
+            # 프로젝트 필터
             if selected_project != '전체':
                 filtered_df = filtered_df[filtered_df['프로젝트명'] == selected_project]
             
+            # 사용여부 필터
             if usage_filter == '사용함(✅)':
                 filtered_df = filtered_df[filtered_df['사용여부'] == '✅']
             elif usage_filter == '미사용(❌)':
                 filtered_df = filtered_df[filtered_df['사용여부'] == '❌']
             
-            # 키워드 목록 표시 (간소화된 레이아웃)
+            # 날짜 필터
+            if date_filter != '전체':
+                from datetime import datetime, timedelta
+                today = datetime.now()
+                
+                if date_filter == '오늘':
+                    target_date = today.strftime('%Y-%m-%d')
+                    filtered_df = filtered_df[filtered_df['날짜'].str.contains(target_date, na=False)]
+                elif date_filter == '최근 3일':
+                    target_date = (today - timedelta(days=3)).strftime('%Y-%m-%d')
+                    filtered_df = filtered_df[filtered_df['날짜'] >= target_date]
+                elif date_filter == '최근 일주일':
+                    target_date = (today - timedelta(days=7)).strftime('%Y-%m-%d')
+                    filtered_df = filtered_df[filtered_df['날짜'] >= target_date]
+                elif date_filter == '최근 한달':
+                    target_date = (today - timedelta(days=30)).strftime('%Y-%m-%d')
+                    filtered_df = filtered_df[filtered_df['날짜'] >= target_date]
+            
+            # 정렬 적용
+            if sort_option == '최신순':
+                filtered_df = filtered_df.sort_values('날짜', ascending=False)
+            elif sort_option == '오래된순':
+                filtered_df = filtered_df.sort_values('날짜', ascending=True)
+            elif sort_option == '키워드명 순':
+                filtered_df = filtered_df.sort_values('키워드', ascending=True)
+            elif sort_option == '프로젝트명 순':
+                filtered_df = filtered_df.sort_values('프로젝트명', ascending=True)
+            
+            # 통계 정보 표시
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("🔍 검색 결과", f"{len(filtered_df)}개")
+            with col2:
+                total_keywords = len(filtered_df)
+                used_keywords = len(filtered_df[filtered_df['사용여부'] == '✅'])
+                st.metric("✅ 사용됨", f"{used_keywords}개")
+            with col3:
+                unused_keywords = len(filtered_df[filtered_df['사용여부'] == '❌'])
+                st.metric("❌ 미사용", f"{unused_keywords}개")
+            with col4:
+                usage_rate = (used_keywords / total_keywords * 100) if total_keywords > 0 else 0
+                st.metric("📊 사용률", f"{usage_rate:.1f}%")
+            
+            # 키워드 목록 표시 (테이블 형태로 깔끔하게)
             st.markdown("#### 📝 키워드 목록")
             
             if not filtered_df.empty:
-                # 키워드별로 간소한 형태로 표시
-                for idx, row in filtered_df.iterrows():
-                    # 원본 데이터프레임에서의 실제 인덱스 찾기
+                # 페이지네이션
+                items_per_page = 20
+                total_items = len(filtered_df)
+                total_pages = (total_items - 1) // items_per_page + 1 if total_items > 0 else 1
+                
+                if 'keyword_page' not in st.session_state:
+                    st.session_state['keyword_page'] = 1
+                
+                # 페이지 컨트롤
+                if total_pages > 1:
+                    page_col1, page_col2, page_col3, page_col4 = st.columns([1, 1, 2, 1])
+                    
+                    with page_col1:
+                        if st.button("⬅️ 이전", disabled=st.session_state['keyword_page'] <= 1, key="prev_keyword_page"):
+                            st.session_state['keyword_page'] -= 1
+                            st.rerun()
+                    
+                    with page_col2:
+                        if st.button("➡️ 다음", disabled=st.session_state['keyword_page'] >= total_pages, key="next_keyword_page"):
+                            st.session_state['keyword_page'] += 1
+                            st.rerun()
+                    
+                    with page_col3:
+                        st.markdown(f"""
+                        <div style="text-align: center; padding: 0.5rem; color: #b0b0b0;">
+                            페이지 {st.session_state['keyword_page']} / {total_pages} 
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    with page_col4:
+                        if st.button("🔄", help="새로고침", key="refresh_keyword_list"):
+                            st.rerun()
+                
+                # 현재 페이지 데이터
+                start_idx = (st.session_state['keyword_page'] - 1) * items_per_page
+                end_idx = start_idx + items_per_page
+                current_page_df = filtered_df.iloc[start_idx:end_idx]
+                
+                # 테이블 헤더
+                st.markdown("""
+                <div style="background: #333333; padding: 0.8rem; border-radius: 8px; margin-bottom: 0.5rem;">
+                    <div style="display: grid; grid-template-columns: 2fr 1.5fr 1fr 1fr 2fr 1fr; gap: 1rem; font-weight: 600; color: #ffffff; font-size: 0.9rem;">
+                        <div>🔑 키워드</div>
+                        <div>📁 프로젝트</div>
+                        <div>📅 등록일</div>
+                        <div>✅ 사용여부</div>
+                        <div>📝 메모</div>
+                        <div style="text-align: center;">⚙️ 관리</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # 키워드 목록 (한 줄씩 깔끔하게)
+                for idx, row in current_page_df.iterrows():
                     original_idx = saved_df.index[saved_df['키워드'] == row['키워드']].tolist()[0]
                     
-                    # 간소한 구분선
-                    if idx > 0:
-                        st.markdown('<div style="border-top: 1px solid #404040; margin: 1rem 0;"></div>', unsafe_allow_html=True)
+                    # 배경색 설정 (홀수/짝수 구분)
+                    bg_color = "#2a2a2a" if idx % 2 == 0 else "#252525"
                     
-                    # 키워드 정보와 컨트롤을 한 줄에 배치
-                    col1, col2, col3, col4 = st.columns([2, 1, 2, 1])
-                    
-                    with col1:
-                        st.markdown(f"**🔑 {row['키워드']}**")
-                        st.caption(f"📁 {row['프로젝트명']} | 📅 {str(row['날짜']).split()[0] if ' ' in str(row['날짜']) else row['날짜']}")
-                    
-                    with col2:
-                        # 사용여부 토글
-                        current_status = row['사용여부'] == '✅'
-                        new_status = st.checkbox(
-                            "사용완료",
-                            value=current_status,
-                            key=f"status_check_{original_idx}"
-                        )
-                    
-                    with col3:
-                        # 메모 입력 (오른쪽으로 이동)
-                        current_memo = row.get('메모', '')
-                        new_memo = st.text_input(
-                            "메모", 
-                            value=current_memo,
-                            key=f"memo_input_{original_idx}",
-                            placeholder="메모를 입력하세요...",
-                            label_visibility="collapsed"
-                        )
-                    
-                    with col4:
-                        # 저장과 삭제 버튼을 세로로 배치
-                        button_col1, button_col2 = st.columns(2)
+                    with st.container():
+                        st.markdown(f"""
+                        <div style="background: {bg_color}; padding: 0.8rem; border-radius: 8px; margin-bottom: 0.3rem;">
+                        """, unsafe_allow_html=True)
                         
-                        with button_col1:
-                            # 저장 버튼
-                            if st.button("💾", key=f"save_btn_{original_idx}", use_container_width=True, help="변경사항 저장"):
-                                # 변경사항이 있으면 업데이트
-                                if new_status != current_status or new_memo != current_memo:
-                                    success = update_keyword_usage(conn, original_idx, new_status, new_memo)
-                                    if success:
-                                        st.success("✅ 업데이트 완료!")
-                                        # 즉시 데이터 다시 로드하여 실시간 반영
-                                        st.session_state.pop('saved_keywords_df', None)
-                                        updated_df = load_keywords_from_sheet(conn)
-                                        if not updated_df.empty and '키워드' in updated_df.columns:
-                                            st.session_state['existing_keywords'] = set(updated_df['키워드'].tolist())
-                                            st.session_state['saved_keywords_df'] = updated_df
-                                        time.sleep(0.3)
-                                        st.rerun()
-                                    else:
-                                        st.error("❌ 업데이트 실패")
-                                else:
-                                    st.info("변경사항이 없습니다.")
+                        # 그리드 레이아웃으로 한 줄에 모든 정보 표시
+                        col1, col2, col3, col4, col5, col6 = st.columns([2, 1.5, 1, 1, 2, 1])
                         
-                        with button_col2:
-                            # 삭제 버튼
-                            if st.button("🗑️", key=f"delete_btn_{original_idx}", use_container_width=True, help="키워드 삭제"):
-                                # 삭제 확인
-                                if st.session_state.get(f"confirm_delete_{original_idx}", False):
-                                    success = delete_keyword_from_sheet(conn, original_idx)
-                                    if success:
-                                        st.success(f"✅ '{row['키워드']}' 키워드가 삭제되었습니다!")
-                                        # 즉시 데이터 다시 로드하여 실시간 반영
-                                        st.session_state.pop('saved_keywords_df', None)
-                                        updated_df = load_keywords_from_sheet(conn)
-                                        if not updated_df.empty and '키워드' in updated_df.columns:
-                                            st.session_state['existing_keywords'] = set(updated_df['키워드'].tolist())
-                                            st.session_state['saved_keywords_df'] = updated_df
+                        with col1:
+                            st.markdown(f"**{row['키워드']}**")
+                        
+                        with col2:
+                            st.markdown(f"{row['프로젝트명']}")
+                        
+                        with col3:
+                            date_str = str(row['날짜']).split()[0] if ' ' in str(row['날짜']) else row['날짜']
+                            st.markdown(f"{date_str}")
+                        
+                        with col4:
+                            current_status = row['사용여부'] == '✅'
+                            new_status = st.checkbox(
+                                "사용완료",
+                                value=current_status,
+                                key=f"status_check_{original_idx}",
+                                label_visibility="collapsed"
+                            )
+                        
+                        with col5:
+                            current_memo = row.get('메모', '')
+                            new_memo = st.text_input(
+                                "메모", 
+                                value=current_memo,
+                                key=f"memo_input_{original_idx}",
+                                placeholder="메모를 입력하세요...",
+                                label_visibility="collapsed"
+                            )
+                        
+                        with col6:
+                            # 액션 버튼들
+                            action_col1, action_col2 = st.columns(2)
+                            
+                            with action_col1:
+                                if st.button("💾", key=f"save_btn_{original_idx}", help="저장", use_container_width=True):
+                                    if new_status != current_status or new_memo != current_memo:
+                                        success = update_keyword_usage(conn, original_idx, new_status, new_memo)
+                                        if success:
+                                            st.success("✅ 저장 완료!")
+                                            # 강제 캐시 클리어 및 데이터 다시 로드
+                                            st.session_state.pop('saved_keywords_df', None)
+                                            updated_df = load_keywords_from_sheet(conn)
+                                            if not updated_df.empty:
+                                                st.session_state['saved_keywords_df'] = updated_df
+                                                st.session_state['existing_keywords'] = set(updated_df['키워드'].tolist())
+                                            time.sleep(0.3)
+                                            st.rerun()
                                         else:
-                                            st.session_state['existing_keywords'] = set()
-                                        # 확인 상태 초기화
-                                        st.session_state[f"confirm_delete_{original_idx}"] = False
-                                        time.sleep(0.3)
-                                        st.rerun()
+                                            st.error("❌ 저장 실패")
                                     else:
-                                        st.error("❌ 삭제 실패")
-                                        st.session_state[f"confirm_delete_{original_idx}"] = False
-                                else:
-                                    # 첫 번째 클릭 시 확인 상태로 변경
-                                    st.session_state[f"confirm_delete_{original_idx}"] = True
-                                    st.warning(f"⚠️ '{row['키워드']}' 삭제 확인: 다시 🗑️ 버튼을 눌러주세요")
-                                    time.sleep(1)
-                                    st.rerun()
+                                        st.info("변경사항 없음")
+                            
+                            with action_col2:
+                                if st.button("🗑️", key=f"delete_btn_{original_idx}", help="삭제", use_container_width=True):
+                                    if st.session_state.get(f"confirm_delete_{original_idx}", False):
+                                        success = delete_keyword_from_sheet(conn, original_idx)
+                                        if success:
+                                            st.success(f"✅ '{row['키워드']}' 삭제됨!")
+                                            # 강제로 모든 캐시 클리어
+                                            for key in list(st.session_state.keys()):
+                                                if 'saved_keywords' in key or 'existing_keywords' in key:
+                                                    del st.session_state[key]
+                                            time.sleep(0.5)
+                                            updated_df = load_keywords_from_sheet(conn)
+                                            if not updated_df.empty:
+                                                st.session_state['saved_keywords_df'] = updated_df
+                                                st.session_state['existing_keywords'] = set(updated_df['키워드'].tolist())
+                                            else:
+                                                st.session_state['existing_keywords'] = set()
+                                                st.session_state['saved_keywords_df'] = pd.DataFrame()
+                                            st.session_state[f"confirm_delete_{original_idx}"] = False
+                                            st.rerun()
+                                        else:
+                                            st.error("❌ 삭제 실패")
+                                            st.session_state[f"confirm_delete_{original_idx}"] = False
+                                    else:
+                                        st.session_state[f"confirm_delete_{original_idx}"] = True
+                                        st.warning(f"⚠️ 삭제 확인: 다시 클릭")
+                                        time.sleep(1)
+                                        st.rerun()
+                        
+                        st.markdown("</div>", unsafe_allow_html=True)
+                
+                # 페이지 정보 하단 표시
+                if total_pages > 1:
+                    st.markdown(f"""
+                    <div style="text-align: center; margin-top: 1rem; padding: 0.5rem; 
+                                background: #2a2a2a; border-radius: 8px; color: #b0b0b0;">
+                        {start_idx + 1}~{min(end_idx, total_items)}번째 표시 중 (전체 {total_items}개)
+                    </div>
+                    """, unsafe_allow_html=True)
             
-            # 데이터프레임으로도 표시 (접기 가능) - 제거됨, 아래로 분리
+            else:
+                st.info(f"📝 '{search_query}' 검색 결과가 없습니다." if search_query else "📝 필터 조건에 맞는 키워드가 없습니다.")
             else:
                 st.info("📝 필터 조건에 맞는 키워드가 없습니다.")
         else:
