@@ -612,7 +612,124 @@ with col2:
             info_text += f"\n(중복 {extraction_info['duplicates_removed']}개 제거됨)"
         st.info(info_text)
 
-# 2. 키워드 선택 섹션
+# 2. 수동 키워드 입력 섹션
+add_section_divider("✏️ 수동 키워드 입력")
+
+col1, col2 = st.columns([3, 1])
+
+with col1:
+    manual_keywords_input = st.text_area(
+        "키워드를 직접 입력하세요 (쉼표로 구분)",
+        height=100,
+        placeholder="키워드1, 키워드2, 키워드3, ...",
+        help="쉼표(,)로 구분하여 여러 키워드를 한번에 입력할 수 있습니다"
+    )
+
+with col2:
+    st.markdown("<br>", unsafe_allow_html=True)  # 약간의 공간
+    if st.button("📝 키워드 추가", type="primary", use_container_width=True):
+        if manual_keywords_input.strip():
+            # 쉼표로 분리하고 정리
+            manual_keywords = [kw.strip() for kw in manual_keywords_input.split(',') if kw.strip()]
+            
+            if manual_keywords:
+                # 기존 키워드와 중복 체크
+                existing_keywords = st.session_state.get('existing_keywords', set())
+                new_keywords = []
+                duplicate_count = 0
+                
+                for keyword in manual_keywords:
+                    if len(keyword) >= 2:  # 최소 2글자 이상
+                        if keyword not in existing_keywords:
+                            new_keywords.append(keyword)
+                        else:
+                            duplicate_count += 1
+                
+                if new_keywords:
+                    # 기존 추출된 키워드와 합치기
+                    current_keywords = st.session_state.get('keywords_list', [])
+                    combined_keywords = current_keywords + new_keywords
+                    st.session_state['keywords_list'] = combined_keywords
+                    
+                    success_msg = f"✅ {len(new_keywords)}개 키워드가 추가되었습니다!"
+                    if duplicate_count > 0:
+                        success_msg += f" (중복 제거: {duplicate_count}개)"
+                    st.success(success_msg)
+                    st.rerun()
+                else:
+                    if duplicate_count > 0:
+                        st.warning(f"⚠️ 입력된 키워드가 모두 기존에 저장된 키워드와 중복됩니다. (중복: {duplicate_count}개)")
+                    else:
+                        st.warning("⚠️ 유효한 키워드가 없습니다. (최소 2글자 이상 입력해주세요)")
+            else:
+                st.warning("⚠️ 키워드를 입력해주세요.")
+        else:
+            st.error("❌ 키워드를 입력해주세요.")
+
+# 입력된 키워드 미리보기 및 바로 저장 옵션
+if manual_keywords_input.strip():
+    preview_keywords = [kw.strip() for kw in manual_keywords_input.split(',') if kw.strip() and len(kw.strip()) >= 2]
+    if preview_keywords:
+        st.markdown("#### 🔍 입력 미리보기")
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            preview_text = " | ".join(preview_keywords)
+            st.text_area(
+                f"추가될 키워드 ({len(preview_keywords)}개)",
+                value=preview_text,
+                height=60,
+                disabled=True
+            )
+        with col2:
+            existing_keywords = st.session_state.get('existing_keywords', set())
+            duplicates = [kw for kw in preview_keywords if kw in existing_keywords]
+            if duplicates:
+                st.warning(f"⚠️ 중복 {len(duplicates)}개")
+            else:
+                st.info(f"✅ 모두 새로운 키워드")
+        
+        # 바로 저장 옵션
+        if conn:
+            st.markdown("#### 💾 바로 저장하기")
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                manual_project_name = st.text_input(
+                    "프로젝트명 (바로 저장용)",
+                    placeholder="예: 수동입력_키워드_모음",
+                    help="프로젝트명을 입력하면 바로 구글시트에 저장됩니다",
+                    key="manual_project_input"
+                )
+            
+            with col2:
+                if st.button("💾 바로 저장", use_container_width=True, key="manual_direct_save"):
+                    if manual_project_name:
+                        # 중복 제거된 새로운 키워드만 저장
+                        existing_keywords = st.session_state.get('existing_keywords', set())
+                        new_keywords_to_save = [kw for kw in preview_keywords if kw not in existing_keywords]
+                        
+                        if new_keywords_to_save:
+                            with st.spinner("구글시트에 저장 중..."):
+                                success = save_keywords_to_sheet(conn, manual_project_name, new_keywords_to_save)
+                            
+                            if success:
+                                saved_sheet = st.session_state.get('last_saved_sheet', '구글시트')
+                                st.success(f"✅ {len(new_keywords_to_save)}개 키워드가 성공적으로 저장되었습니다! (저장 위치: {saved_sheet})")
+                                # 저장된 키워드들을 기존 키워드 목록에 추가
+                                if 'existing_keywords' not in st.session_state:
+                                    st.session_state['existing_keywords'] = set()
+                                st.session_state['existing_keywords'].update(new_keywords_to_save)
+                                # 캐시 클리어해서 즉시 업데이트 반영
+                                st.session_state.pop('saved_keywords_df', None)
+                                st.rerun()
+                            else:
+                                st.error("❌ 저장 중 오류가 발생했습니다.")
+                        else:
+                            st.warning("⚠️ 저장할 새로운 키워드가 없습니다. (모두 중복)")
+                    else:
+                        st.warning("⚠️ 프로젝트명을 입력해주세요.")
+
+# 3. 키워드 선택 섹션
 if st.session_state.get('keywords_list'):
     add_section_divider("🎯 키워드 선택")
     
@@ -678,7 +795,7 @@ if st.session_state.get('keywords_list'):
                 st.session_state['selected_keywords'] = []
                 st.rerun()
 
-# 3. 저장 섹션
+# 4. 저장 섹션
 if st.session_state.get('selected_keywords') and conn:
     add_section_divider("💾 구글시트에 저장")
     
@@ -704,6 +821,8 @@ if st.session_state.get('selected_keywords') and conn:
                     if 'existing_keywords' not in st.session_state:
                         st.session_state['existing_keywords'] = set()
                     st.session_state['existing_keywords'].update(st.session_state['selected_keywords'])
+                    # 캐시 클리어해서 즉시 업데이트 반영
+                    st.session_state.pop('saved_keywords_df', None)
                     # 저장 후 선택 해제
                     st.session_state['selected_keywords'] = []
                     st.rerun()
@@ -723,7 +842,7 @@ if st.session_state.get('selected_keywords') and conn:
             help="저장할 키워드 목록입니다"
         )
 
-# 4. 저장된 키워드 관리 섹션 (토글 방식)
+# 5. 저장된 키워드 관리 섹션 (토글 방식)
 if conn:
     add_section_divider("📊 저장된 키워드 관리")
     
@@ -866,6 +985,10 @@ if conn:
                                     st.success("✅ 업데이트 완료!")
                                     # 캐시 클리어하고 새로고침
                                     st.session_state.pop('saved_keywords_df', None)
+                                    # 기존 키워드 목록도 다시 로드
+                                    updated_df = load_keywords_from_sheet(conn)
+                                    if not updated_df.empty and '키워드' in updated_df.columns:
+                                        st.session_state['existing_keywords'] = set(updated_df['키워드'].tolist())
                                     time.sleep(0.5)
                                     st.rerun()
                                 else:
