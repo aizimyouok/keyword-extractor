@@ -589,7 +589,7 @@ if manual_keywords_input.strip():
             st.text_area(
                 f"추가될 키워드 ({len(preview_keywords)}개)",
                 value=preview_text,
-                height=60,
+                height=80,
                 disabled=True
             )
         with col2:
