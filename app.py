@@ -700,23 +700,29 @@ if conn:
         
         # 키워드 목록을 토글로 표시
         if show_keywords:
-            # 필터링 옵션
+            # 필터링 옵션 - 더 자연스럽게 스타일링
+            st.markdown("""
+            <div style="background: #2a2a2a; padding: 1.5rem; border-radius: 12px; margin: 1rem 0; border: 1px solid #333333;">
+                <h4 style="color: #667eea; margin: 0 0 1rem 0; font-size: 1.1rem;">🔍 필터 옵션</h4>
+            </div>
+            """, unsafe_allow_html=True)
+            
             col1, col2, col3 = st.columns(3)
             
             with col1:
                 projects = ['전체'] + list(saved_df['프로젝트명'].unique())
-                selected_project = st.selectbox("프로젝트 필터", projects)
+                selected_project = st.selectbox("📁 프로젝트", projects, label_visibility="visible")
             
             with col2:
-                usage_filter = st.selectbox("사용여부 필터", ['전체', '사용함(✅)', '미사용(❌)'])
+                usage_filter = st.selectbox("✅ 사용여부", ['전체', '사용함(✅)', '미사용(❌)'], label_visibility="visible")
             
             with col3:
-                if st.button("📊 통계 보기"):
+                if st.button("📊 통계 보기", use_container_width=True):
                     total_keywords = len(saved_df)
                     used_keywords = len(saved_df[saved_df['사용여부'] == '✅'])
                     usage_rate = (used_keywords / total_keywords * 100) if total_keywords > 0 else 0
                     
-                    st.info(f"📈 전체 키워드: {total_keywords}개 | ✅ 사용한 키워드: {used_keywords}개 | 📊 사용률: {usage_rate:.1f}%")
+                    st.info(f"📈 전체: {total_keywords}개 | ✅ 사용: {used_keywords}개 | 📊 사용률: {usage_rate:.1f}%")
             
             # 필터 적용
             filtered_df = saved_df.copy()
@@ -729,62 +735,62 @@ if conn:
             elif usage_filter == '미사용(❌)':
                 filtered_df = filtered_df[filtered_df['사용여부'] == '❌']
             
-            # 키워드 목록 표시 (편집 가능)
+            # 키워드 목록 표시 (간소화된 레이아웃)
             st.markdown("#### 📝 키워드 목록")
             
             if not filtered_df.empty:
-                # 키워드별로 카드 형태로 표시
+                # 키워드별로 간소한 형태로 표시
                 for idx, row in filtered_df.iterrows():
                     # 원본 데이터프레임에서의 실제 인덱스 찾기
                     original_idx = saved_df.index[saved_df['키워드'] == row['키워드']].tolist()[0]
                     
-                    with st.container():
-                        # 카드 스타일 컨테이너
-                        st.markdown('<div style="background: #333333; padding: 1.5rem; border-radius: 12px; margin-bottom: 1rem; border: 1px solid #404040;">', unsafe_allow_html=True)
-                        
-                        col1, col2, col3, col4 = st.columns([3, 2, 1, 1])
-                        
-                        with col1:
-                            st.markdown(f"**🔑 {row['키워드']}**")
-                            st.caption(f"📁 {row['프로젝트명']} | 📅 {str(row['날짜']).split()[0] if ' ' in str(row['날짜']) else row['날짜']}")
-                        
-                        with col2:
-                            # 메모 입력
-                            current_memo = row.get('메모', '')
-                            new_memo = st.text_input(
-                                "메모", 
-                                value=current_memo,
-                                key=f"memo_input_{original_idx}",
-                                placeholder="메모를 입력하세요..."
-                            )
-                        
-                        with col3:
-                            # 사용여부 토글
-                            current_status = row['사용여부'] == '✅'
-                            new_status = st.checkbox(
-                                "사용완료",
-                                value=current_status,
-                                key=f"status_check_{original_idx}"
-                            )
-                        
-                        with col4:
-                            # 저장 버튼
-                            if st.button("💾 저장", key=f"save_btn_{original_idx}", use_container_width=True):
-                                # 변경사항이 있으면 업데이트
-                                if new_status != current_status or new_memo != current_memo:
-                                    success = update_keyword_usage(conn, original_idx, new_status, new_memo)
-                                    if success:
-                                        st.success("✅ 업데이트 완료!")
-                                        # 캐시 클리어하고 새로고침
-                                        st.session_state.pop('saved_keywords_df', None)
-                                        time.sleep(0.5)
-                                        st.rerun()
-                                    else:
-                                        st.error("❌ 업데이트 실패")
+                    # 간소한 구분선
+                    if idx > 0:
+                        st.markdown('<div style="border-top: 1px solid #404040; margin: 1rem 0;"></div>', unsafe_allow_html=True)
+                    
+                    # 키워드 정보와 컨트롤을 한 줄에 배치
+                    col1, col2, col3, col4 = st.columns([2, 1, 2, 1])
+                    
+                    with col1:
+                        st.markdown(f"**🔑 {row['키워드']}**")
+                        st.caption(f"📁 {row['프로젝트명']} | 📅 {str(row['날짜']).split()[0] if ' ' in str(row['날짜']) else row['날짜']}")
+                    
+                    with col2:
+                        # 사용여부 토글
+                        current_status = row['사용여부'] == '✅'
+                        new_status = st.checkbox(
+                            "사용완료",
+                            value=current_status,
+                            key=f"status_check_{original_idx}"
+                        )
+                    
+                    with col3:
+                        # 메모 입력 (오른쪽으로 이동)
+                        current_memo = row.get('메모', '')
+                        new_memo = st.text_input(
+                            "메모", 
+                            value=current_memo,
+                            key=f"memo_input_{original_idx}",
+                            placeholder="메모를 입력하세요...",
+                            label_visibility="collapsed"
+                        )
+                    
+                    with col4:
+                        # 저장 버튼
+                        if st.button("💾", key=f"save_btn_{original_idx}", use_container_width=True, help="변경사항 저장"):
+                            # 변경사항이 있으면 업데이트
+                            if new_status != current_status or new_memo != current_memo:
+                                success = update_keyword_usage(conn, original_idx, new_status, new_memo)
+                                if success:
+                                    st.success("✅ 업데이트 완료!")
+                                    # 캐시 클리어하고 새로고침
+                                    st.session_state.pop('saved_keywords_df', None)
+                                    time.sleep(0.5)
+                                    st.rerun()
                                 else:
-                                    st.info("변경사항이 없습니다.")
-                        
-                        st.markdown('</div>', unsafe_allow_html=True)
+                                    st.error("❌ 업데이트 실패")
+                            else:
+                                st.info("변경사항이 없습니다.")
             
             else:
                 st.info("📝 필터 조건에 맞는 키워드가 없습니다.")
