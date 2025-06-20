@@ -58,3 +58,4 @@ if st.session_state.get('show_connection_status', True):
         if st.button("✖", help="상태 메시지 숨기기", key="hide_status"):
             st.session_state['show_connection_status'] = False
             st.rerun()
+        
