@@ -1196,7 +1196,6 @@ if conn:
                         {start_idx + 1}~{min(end_idx, total_items)}번째 표시 중 (전체 {total_items}개)
                     </div>
                     """, unsafe_allow_html=True)
-            
             else:
                 st.info(f"📝 '{search_query}' 검색 결과가 없습니다." if search_query else "📝 필터 조건에 맞는 키워드가 없습니다.")
         else:
