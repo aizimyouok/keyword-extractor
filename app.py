@@ -780,64 +780,6 @@ if st.session_state.get('selected_keywords') and conn:
 if conn:
     add_section_divider("📊 저장된 키워드 관리")
     
-    # 컨트롤 버튼들
-    col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1])
-    with col1:
-        if st.button("🔄 강력 새로고침", use_container_width=True):
-            # 모든 캐시 완전 삭제
-            for key in list(st.session_state.keys()):
-                if any(cache_key in key for cache_key in ['saved_keywords', 'existing_keywords', 'sheet_load']):
-                    del st.session_state[key]
-            
-            # 강제로 최신 데이터 불러오기
-            with st.spinner("최신 데이터를 불러오는 중..."):
-                time.sleep(0.5)
-                updated_df = load_keywords_from_sheet(conn, force_refresh=True)
-                if not updated_df.empty:
-                    st.session_state['saved_keywords_df'] = updated_df
-                    st.session_state['existing_keywords'] = set(updated_df['키워드'].tolist())
-                    st.success(f"✅ 최신 데이터 로드 완료! (총 {len(updated_df)}개 키워드)")
-                else:
-                    st.warning("⚠️ 데이터를 불러올 수 없습니다.")
-            st.rerun()
-    
-    with col2:
-        if st.button("🔍 연결 테스트", use_container_width=True):
-            try:
-                # 캐시 무시하고 실제 데이터 확인
-                test_df = conn.read(ttl=0)
-                st.success(f"✅ 연결 성공! 실제 {len(test_df)}개 행 발견")
-                st.info(f"컬럼: {list(test_df.columns) if not test_df.empty else '없음'}")
-                
-                # 현재 세션에 저장된 데이터와 비교
-                current_saved = len(st.session_state.get('saved_keywords_df', pd.DataFrame()))
-                if current_saved != len(test_df):
-                    st.warning(f"⚠️ 데이터 불일치! 실제: {len(test_df)}개 vs 세션: {current_saved}개")
-                    if st.button("🔄 즉시 동기화", key="sync_now"):
-                        # 강제 동기화
-                        for key in list(st.session_state.keys()):
-                            if any(cache_key in key for cache_key in ['saved_keywords', 'existing_keywords']):
-                                del st.session_state[key]
-                        st.session_state['saved_keywords_df'] = test_df
-                        if not test_df.empty and '키워드' in test_df.columns:
-                            st.session_state['existing_keywords'] = set(test_df['키워드'].tolist())
-                        st.success("✅ 동기화 완료!")
-                        st.rerun()
-                else:
-                    st.success("✅ 데이터가 완전히 동기화되어 있습니다!")
-                    
-            except Exception as e:
-                st.error(f"❌ 연결 실패: {e}")
-    
-    with col3:
-        debug_mode = st.checkbox("🐛 디버그 모드")
-    
-    with col4:
-        show_keywords = st.checkbox("📋 키워드 목록 보기", value=False)
-    
-    with col5:
-        show_full_table = st.checkbox("📊 전체 테이블 보기", value=False)
-    
     # 저장된 키워드 불러오기 (항상 최신 데이터 사용)
     saved_df = load_keywords_from_sheet(conn, force_refresh=True)
     
@@ -847,101 +789,163 @@ if conn:
         st.success(f"✅ {sheet_name}에서 데이터를 불러왔습니다!")
         del st.session_state['sheet_load_success']
     
-    if debug_mode and not saved_df.empty:
-        st.markdown("#### 🐛 디버그 정보")
-        st.write(f"**데이터 형태**: {saved_df.shape}")
-        st.write(f"**컬럼명**: {list(saved_df.columns)}")
-        st.write(f"**데이터 타입**: {saved_df.dtypes.to_dict()}")
-        st.dataframe(saved_df.head(3), use_container_width=True)
-    
     if not saved_df.empty:
         st.session_state['saved_keywords_df'] = saved_df
         
+        # 🔍 통합 검색 & 필터 시스템 (최우선 배치)
+        st.markdown("#### 🔍 통합 검색 & 필터")
+        
+        # 검색창
+        search_query = st.text_input(
+            "🔍 통합 검색",
+            placeholder="키워드명, 프로젝트명, 메모에서 검색...",
+            help="모든 필드에서 검색됩니다"
+        )
+        
+        # 필터 옵션들
+        filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(4)
+        
+        with filter_col1:
+            projects = ['전체'] + list(saved_df['프로젝트명'].unique())
+            selected_project = st.selectbox("📁 프로젝트", projects)
+        
+        with filter_col2:
+            usage_filter = st.selectbox("✅ 사용여부", ['전체', '사용함(✅)', '미사용(❌)'])
+        
+        with filter_col3:
+            date_filter = st.selectbox("📅 등록일", ['전체', '오늘', '최근 3일', '최근 일주일', '최근 한달'])
+        
+        with filter_col4:
+            sort_option = st.selectbox("🔄 정렬", ['최신순', '오래된순', '키워드명 순', '프로젝트명 순'])
+        
+        # 필터 적용
+        filtered_df = saved_df.copy()
+        
+        # 검색어 필터
+        if search_query:
+            search_mask = (
+                filtered_df['키워드'].str.contains(search_query, case=False, na=False) |
+                filtered_df['프로젝트명'].str.contains(search_query, case=False, na=False) |
+                filtered_df['메모'].str.contains(search_query, case=False, na=False)
+            )
+            filtered_df = filtered_df[search_mask]
+        
+        # 프로젝트 필터
+        if selected_project != '전체':
+            filtered_df = filtered_df[filtered_df['프로젝트명'] == selected_project]
+        
+        # 사용여부 필터
+        if usage_filter == '사용함(✅)':
+            filtered_df = filtered_df[filtered_df['사용여부'] == '✅']
+        elif usage_filter == '미사용(❌)':
+            filtered_df = filtered_df[filtered_df['사용여부'] == '❌']
+        
+        # 날짜 필터 (간단화)
+        if date_filter != '전체':
+            from datetime import datetime, timedelta
+            today = datetime.now()
+            
+            if date_filter == '오늘':
+                target_date = today.strftime('%Y-%m-%d')
+                filtered_df = filtered_df[filtered_df['날짜'].str.contains(target_date, na=False)]
+        
+        # 정렬 적용
+        if sort_option == '최신순':
+            filtered_df = filtered_df.sort_values('날짜', ascending=False)
+        elif sort_option == '오래된순':
+            filtered_df = filtered_df.sort_values('날짜', ascending=True)
+        elif sort_option == '키워드명 순':
+            filtered_df = filtered_df.sort_values('키워드', ascending=True)
+        elif sort_option == '프로젝트명 순':
+            filtered_df = filtered_df.sort_values('프로젝트명', ascending=True)
+        
+        # 통계 정보 표시
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("🔍 검색 결과", f"{len(filtered_df)}개")
+        with col2:
+            total_keywords = len(filtered_df)
+            used_keywords = len(filtered_df[filtered_df['사용여부'] == '✅'])
+            st.metric("✅ 사용됨", f"{used_keywords}개")
+        with col3:
+            unused_keywords = len(filtered_df[filtered_df['사용여부'] == '❌'])
+            st.metric("❌ 미사용", f"{unused_keywords}개")
+        with col4:
+            usage_rate = (used_keywords / total_keywords * 100) if total_keywords > 0 else 0
+            st.metric("📊 사용률", f"{usage_rate:.1f}%")
+        
+        # 컨트롤 버튼들 (작게 배치)
+        st.markdown("#### 🎛️ 컨트롤")
+        col1, col2, col3, col4, col5, col6 = st.columns(6)
+        
+        with col1:
+            if st.button("🔄 강력 새로고침", use_container_width=True):
+                # 모든 캐시 완전 삭제
+                for key in list(st.session_state.keys()):
+                    if any(cache_key in key for cache_key in ['saved_keywords', 'existing_keywords', 'sheet_load']):
+                        del st.session_state[key]
+                
+                # 강제로 최신 데이터 불러오기
+                with st.spinner("최신 데이터를 불러오는 중..."):
+                    time.sleep(0.5)
+                    updated_df = load_keywords_from_sheet(conn, force_refresh=True)
+                    if not updated_df.empty:
+                        st.session_state['saved_keywords_df'] = updated_df
+                        st.session_state['existing_keywords'] = set(updated_df['키워드'].tolist())
+                        st.success(f"✅ 최신 데이터 로드 완료! (총 {len(updated_df)}개 키워드)")
+                    else:
+                        st.warning("⚠️ 데이터를 불러올 수 없습니다.")
+                st.rerun()
+        
+        with col2:
+            if st.button("🔍 연결 테스트", use_container_width=True):
+                try:
+                    # 캐시 무시하고 실제 데이터 확인
+                    test_df = conn.read(ttl=0)
+                    st.success(f"✅ 연결 성공! ({len(test_df)}개)")
+                    
+                    # 현재 세션에 저장된 데이터와 비교
+                    current_saved = len(st.session_state.get('saved_keywords_df', pd.DataFrame()))
+                    if current_saved != len(test_df):
+                        st.warning(f"⚠️ 데이터 불일치! 실제: {len(test_df)}개 vs 세션: {current_saved}개")
+                        if st.button("🔄 즉시 동기화", key="sync_now"):
+                            # 강제 동기화
+                            for key in list(st.session_state.keys()):
+                                if any(cache_key in key for cache_key in ['saved_keywords', 'existing_keywords']):
+                                    del st.session_state[key]
+                            st.session_state['saved_keywords_df'] = test_df
+                            if not test_df.empty and '키워드' in test_df.columns:
+                                st.session_state['existing_keywords'] = set(test_df['키워드'].tolist())
+                            st.success("✅ 동기화 완료!")
+                            st.rerun()
+                    else:
+                        st.success("✅ 데이터 동기화됨!")
+                        
+                except Exception as e:
+                    st.error(f"❌ 연결 실패: {e}")
+        
+        with col3:
+            debug_mode = st.checkbox("🐛 디버그")
+        
+        with col4:
+            show_keywords = st.checkbox("📋 목록 보기", value=True)
+        
+        with col5:
+            show_full_table = st.checkbox("📊 테이블", value=False)
+        
+        with col6:
+            st.write("")  # 빈 공간
+        
+        # 디버그 모드
+        if debug_mode and not saved_df.empty:
+            st.markdown("#### 🐛 디버그 정보")
+            st.write(f"**데이터 형태**: {saved_df.shape}")
+            st.write(f"**컬럼명**: {list(saved_df.columns)}")
+            st.write(f"**데이터 타입**: {saved_df.dtypes.to_dict()}")
+            st.dataframe(saved_df.head(3), use_container_width=True)
+        
         # 키워드 목록 표시
         if show_keywords:
-            # 통합 검색 및 필터 시스템
-            st.markdown("#### 🔍 통합 검색 & 필터")
-            
-            # 검색창
-            search_query = st.text_input(
-                "🔍 통합 검색",
-                placeholder="키워드명, 프로젝트명, 메모에서 검색...",
-                help="모든 필드에서 검색됩니다"
-            )
-            
-            # 필터 옵션들
-            filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(4)
-            
-            with filter_col1:
-                projects = ['전체'] + list(saved_df['프로젝트명'].unique())
-                selected_project = st.selectbox("📁 프로젝트", projects)
-            
-            with filter_col2:
-                usage_filter = st.selectbox("✅ 사용여부", ['전체', '사용함(✅)', '미사용(❌)'])
-            
-            with filter_col3:
-                date_filter = st.selectbox("📅 등록일", ['전체', '오늘', '최근 3일', '최근 일주일', '최근 한달'])
-            
-            with filter_col4:
-                sort_option = st.selectbox("🔄 정렬", ['최신순', '오래된순', '키워드명 순', '프로젝트명 순'])
-            
-            # 필터 적용
-            filtered_df = saved_df.copy()
-            
-            # 검색어 필터
-            if search_query:
-                search_mask = (
-                    filtered_df['키워드'].str.contains(search_query, case=False, na=False) |
-                    filtered_df['프로젝트명'].str.contains(search_query, case=False, na=False) |
-                    filtered_df['메모'].str.contains(search_query, case=False, na=False)
-                )
-                filtered_df = filtered_df[search_mask]
-            
-            # 프로젝트 필터
-            if selected_project != '전체':
-                filtered_df = filtered_df[filtered_df['프로젝트명'] == selected_project]
-            
-            # 사용여부 필터
-            if usage_filter == '사용함(✅)':
-                filtered_df = filtered_df[filtered_df['사용여부'] == '✅']
-            elif usage_filter == '미사용(❌)':
-                filtered_df = filtered_df[filtered_df['사용여부'] == '❌']
-            
-            # 날짜 필터 (간단화)
-            if date_filter != '전체':
-                from datetime import datetime, timedelta
-                today = datetime.now()
-                
-                if date_filter == '오늘':
-                    target_date = today.strftime('%Y-%m-%d')
-                    filtered_df = filtered_df[filtered_df['날짜'].str.contains(target_date, na=False)]
-            
-            # 정렬 적용
-            if sort_option == '최신순':
-                filtered_df = filtered_df.sort_values('날짜', ascending=False)
-            elif sort_option == '오래된순':
-                filtered_df = filtered_df.sort_values('날짜', ascending=True)
-            elif sort_option == '키워드명 순':
-                filtered_df = filtered_df.sort_values('키워드', ascending=True)
-            elif sort_option == '프로젝트명 순':
-                filtered_df = filtered_df.sort_values('프로젝트명', ascending=True)
-            
-            # 통계 정보 표시
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("🔍 검색 결과", f"{len(filtered_df)}개")
-            with col2:
-                total_keywords = len(filtered_df)
-                used_keywords = len(filtered_df[filtered_df['사용여부'] == '✅'])
-                st.metric("✅ 사용됨", f"{used_keywords}개")
-            with col3:
-                unused_keywords = len(filtered_df[filtered_df['사용여부'] == '❌'])
-                st.metric("❌ 미사용", f"{unused_keywords}개")
-            with col4:
-                usage_rate = (used_keywords / total_keywords * 100) if total_keywords > 0 else 0
-                st.metric("📊 사용률", f"{usage_rate:.1f}%")
-            
-            # 키워드 목록 표시
             st.markdown("#### 📝 키워드 목록")
             
             if not filtered_df.empty:
@@ -1085,7 +1089,7 @@ if conn:
                 )
         
         if not show_keywords and not show_full_table:
-            st.info(f"💡 총 {len(saved_df)}개의 키워드가 저장되어 있습니다. '📋 키워드 목록 보기' 또는 '📊 전체 테이블 보기'를 체크하여 확인하세요.")
+            st.info(f"💡 총 {len(saved_df)}개의 키워드가 저장되어 있습니다. '📋 목록 보기' 또는 '📊 테이블'을 체크하여 확인하세요.")
     
     else:
         st.info("📝 아직 저장된 키워드가 없습니다. 키워드를 추출하고 저장해보세요!")
