@@ -128,39 +128,47 @@ def save_keywords_to_sheet(conn, project_name, keywords_list):
         st.error(f"키워드 저장 실패: {e}")
         return False
 
-def load_keywords_from_sheet(conn):
+def load_keywords_from_sheet(conn, force_refresh=False):
     """구글시트에서 키워드 불러오기"""
     if not conn:
         return pd.DataFrame()
     
-    try:
-        # 여러 시트 이름 시도
-        sheet_names = ["키워드관리", "Sheet1", "시트1", None]  # None은 첫 번째 시트
-        
-        for sheet_name in sheet_names:
-            try:
-                if sheet_name:
-                    df = conn.read(worksheet=sheet_name)
-                else:
-                    df = conn.read()  # 첫 번째 시트 읽기
-                
-                # 데이터가 있고 필요한 컬럼이 있는지 확인
-                if not df.empty and '키워드' in df.columns:
-                    # 성공 메시지를 세션에 저장 (한번만 표시)
-                    if 'sheet_load_success' not in st.session_state:
-                        st.session_state['sheet_load_success'] = f"시트 '{sheet_name or '첫번째 시트'}'"
-                    return df
+    # 강제 새로고침이 요청되거나 캐시가 없으면 새로 로드
+    cache_key = 'cached_keywords_df'
+    if force_refresh or cache_key not in st.session_state:
+        try:
+            # 여러 시트 이름 시도
+            sheet_names = ["키워드관리", "Sheet1", "시트1", None]  # None은 첫 번째 시트
+            
+            for sheet_name in sheet_names:
+                try:
+                    if sheet_name:
+                        df = conn.read(worksheet=sheet_name)
+                    else:
+                        df = conn.read()  # 첫 번째 시트 읽기
                     
-            except Exception as sheet_error:
-                continue
-        
-        # 모든 시트에서 실패한 경우
-        st.warning("⚠️ 키워드 데이터를 찾을 수 없습니다. 구글시트를 확인해주세요.")
-        return pd.DataFrame()
-        
-    except Exception as e:
-        st.error(f"❌ 구글시트 연결 오류: {e}")
-        return pd.DataFrame()
+                    # 데이터가 있고 필요한 컬럼이 있는지 확인
+                    if not df.empty and '키워드' in df.columns:
+                        # 캐시에 저장
+                        st.session_state[cache_key] = df
+                        # 성공 메시지를 세션에 저장 (한번만 표시)
+                        if 'sheet_load_success' not in st.session_state:
+                            st.session_state['sheet_load_success'] = f"시트 '{sheet_name or '첫번째 시트'}'"
+                        return df
+                        
+                except Exception as sheet_error:
+                    continue
+            
+            # 모든 시트에서 실패한 경우
+            st.warning("⚠️ 키워드 데이터를 찾을 수 없습니다. 구글시트를 확인해주세요.")
+            return pd.DataFrame()
+            
+        except Exception as e:
+            st.error(f"❌ 구글시트 연결 오류: {e}")
+            return pd.DataFrame()
+    else:
+        # 캐시된 데이터 반환
+        return st.session_state.get(cache_key, pd.DataFrame())
 
 def update_keyword_usage(conn, original_index, used_status, memo=""):
     """키워드 사용여부 업데이트 (인덱스 문제 해결)"""
@@ -508,6 +516,7 @@ with header_col1:
 # 구글시트 연결하고 저장된 키워드 수 실시간 확인
 conn = get_google_sheet_connection()
 if conn:
+    # 처음 로드 시에는 캐시 사용, 저장 후에는 강제 새로고침
     current_saved_df = load_keywords_from_sheet(conn)
     total_saved = len(current_saved_df) if not current_saved_df.empty else 0
     # 기존 키워드 목록을 세션에 저장 (중복 체크용)
@@ -677,7 +686,7 @@ if manual_keywords_input.strip():
             st.text_area(
                 f"추가될 키워드 ({len(preview_keywords)}개)",
                 value=preview_text,
-                height=60,
+                height=68,  # 최소 68px로 수정
                 disabled=True
             )
         with col2:
@@ -721,6 +730,9 @@ if manual_keywords_input.strip():
                                 st.session_state['existing_keywords'].update(new_keywords_to_save)
                                 # 캐시 클리어해서 즉시 업데이트 반영
                                 st.session_state.pop('saved_keywords_df', None)
+                                st.session_state.pop('cached_keywords_df', None)  # 새로운 캐시도 클리어
+                                # 입력창도 비우기
+                                st.session_state['manual_project_input'] = ""
                                 st.rerun()
                             else:
                                 st.error("❌ 저장 중 오류가 발생했습니다.")
@@ -823,6 +835,7 @@ if st.session_state.get('selected_keywords') and conn:
                     st.session_state['existing_keywords'].update(st.session_state['selected_keywords'])
                     # 캐시 클리어해서 즉시 업데이트 반영
                     st.session_state.pop('saved_keywords_df', None)
+                    st.session_state.pop('cached_keywords_df', None)  # 새로운 캐시도 클리어
                     # 저장 후 선택 해제
                     st.session_state['selected_keywords'] = []
                     st.rerun()
@@ -851,6 +864,7 @@ if conn:
     with col1:
         if st.button("🔄 새로고침", use_container_width=True):
             st.session_state.pop('saved_keywords_df', None)  # 캐시 클리어
+            st.session_state.pop('cached_keywords_df', None)  # 새로운 캐시도 클리어
             st.session_state.pop('sheet_load_success', None)  # 성공 메시지 초기화
             st.rerun()
     
@@ -858,8 +872,8 @@ if conn:
         if st.button("🔍 연결 테스트", use_container_width=True):
             if conn:
                 try:
-                    # 모든 시트 정보 확인
-                    test_df = conn.read()
+                    # 강제 새로고침으로 최신 데이터 확인
+                    test_df = load_keywords_from_sheet(conn, force_refresh=True)
                     st.success(f"✅ 연결 성공! {len(test_df)}개 행 발견")
                     st.info(f"컬럼: {list(test_df.columns) if not test_df.empty else '없음'}")
                 except Exception as e:
@@ -878,8 +892,9 @@ if conn:
         # 전체 데이터 테이블 토글 버튼
         show_full_table = st.checkbox("📊 전체 테이블 보기", value=False)
     
-    # 저장된 키워드 불러오기
-    saved_df = load_keywords_from_sheet(conn)
+    # 저장된 키워드 불러오기 (새로고침 버튼 눌렸으면 강제 새로고침)
+    force_refresh = 'cached_keywords_df' not in st.session_state
+    saved_df = load_keywords_from_sheet(conn, force_refresh=force_refresh)
     
     # 성공 메시지 표시 (한번만)
     if 'sheet_load_success' in st.session_state and st.session_state.get('show_connection_status', True):
@@ -985,8 +1000,9 @@ if conn:
                                     st.success("✅ 업데이트 완료!")
                                     # 캐시 클리어하고 새로고침
                                     st.session_state.pop('saved_keywords_df', None)
+                                    st.session_state.pop('cached_keywords_df', None)  # 새로운 캐시도 클리어
                                     # 기존 키워드 목록도 다시 로드
-                                    updated_df = load_keywords_from_sheet(conn)
+                                    updated_df = load_keywords_from_sheet(conn, force_refresh=True)
                                     if not updated_df.empty and '키워드' in updated_df.columns:
                                         st.session_state['existing_keywords'] = set(updated_df['키워드'].tolist())
                                     time.sleep(0.5)
