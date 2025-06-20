@@ -1198,8 +1198,105 @@ if conn:
                     """, unsafe_allow_html=True)
             else:
                 st.info(f"📝 '{search_query}' 검색 결과가 없습니다." if search_query else "📝 필터 조건에 맞는 키워드가 없습니다.")
-        else:
-            st.info(f"💡 총 {len(saved_df)}개의 키워드가 저장되어 있습니다. '📋 키워드 목록 보기'를 체크하여 확인하세요.")
+        
+        # 전체 데이터 테이블 (별도 섹션으로 분리)
+        if show_full_table:
+            add_section_divider("📊 전체 데이터 테이블")
+            
+            # 페이지네이션 설정
+            items_per_page = 30
+            total_items = len(saved_df)
+            total_pages = (total_items - 1) // items_per_page + 1 if total_items > 0 else 1
+            
+            # 페이지 번호 초기화
+            if 'current_page' not in st.session_state:
+                st.session_state['current_page'] = 1
+            
+            # 페이지 컨트롤
+            if total_pages > 1:
+                col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
+                
+                with col1:
+                    if st.button("⬅️ 이전", disabled=st.session_state['current_page'] <= 1):
+                        st.session_state['current_page'] -= 1
+                        st.rerun()
+                
+                with col2:
+                    if st.button("➡️ 다음", disabled=st.session_state['current_page'] >= total_pages):
+                        st.session_state['current_page'] += 1
+                        st.rerun()
+                
+                with col3:
+                    st.markdown(f"""
+                    <div style="text-align: center; padding: 0.5rem; color: #b0b0b0;">
+                        페이지 {st.session_state['current_page']} / {total_pages} 
+                        (총 {total_items}개 항목)
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col4:
+                    # 페이지 직접 이동
+                    page_input = st.number_input(
+                        "페이지", 
+                        min_value=1, 
+                        max_value=total_pages, 
+                        value=st.session_state['current_page'],
+                        key="page_input"
+                    )
+                    if page_input != st.session_state['current_page']:
+                        st.session_state['current_page'] = page_input
+                        st.rerun()
+                
+                with col5:
+                    if st.button("🔄", help="새로고침"):
+                        st.rerun()
+            
+            # 현재 페이지 데이터 계산
+            start_idx = (st.session_state['current_page'] - 1) * items_per_page
+            end_idx = start_idx + items_per_page
+            current_page_df = saved_df.iloc[start_idx:end_idx]
+            
+            # 데이터프레임 표시
+            if not current_page_df.empty:
+                st.dataframe(
+                    current_page_df,
+                    use_container_width=True,
+                    hide_index=False,
+                    column_config={
+                        '날짜': st.column_config.DatetimeColumn('날짜', width="medium"),
+                        '프로젝트명': st.column_config.TextColumn('프로젝트명', width="medium"),
+                        '키워드': st.column_config.TextColumn('키워드', width="large"),
+                        '사용여부': st.column_config.TextColumn('사용여부', width="small"),
+                        '메모': st.column_config.TextColumn('메모', width="large")
+                    }
+                )
+                
+                # 페이지 정보 하단에도 표시
+                if total_pages > 1:
+                    st.markdown(f"""
+                    <div style="text-align: center; margin-top: 1rem; padding: 0.5rem; 
+                                background: #2a2a2a; border-radius: 8px; color: #b0b0b0;">
+                        {start_idx + 1}~{min(end_idx, total_items)}번째 항목 표시 중 
+                        (전체 {total_items}개 중 {len(current_page_df)}개)
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("📝 해당 페이지에 표시할 데이터가 없습니다.")
+        
+        if not show_keywords and not show_full_table:
+            st.info(f"💡 총 {len(saved_df)}개의 키워드가 저장되어 있습니다. '📋 키워드 목록 보기' 또는 '📊 전체 테이블 보기'를 체크하여 확인하세요.")
+    
+    else:
+        st.info("📝 아직 저장된 키워드가 없습니다. 키워드를 추출하고 저장해보세요!")
+        
+        st.markdown("""
+        **💡 저장된 키워드가 안 보인다면:**
+        - 구글시트에 데이터가 있는지 확인해보세요
+        - 새로고침 버튼을 눌러보세요  
+        - 구글시트의 시트 이름을 확인해보세요 (권장: "키워드관리")
+        """)
+else:
+    st.warning("⚠️ 구글시트 연결을 확인해주세요. secrets.toml 파일에 인증 정보가 설정되어 있나요?")
             else:
                 st.info("📝 필터 조건에 맞는 키워드가 없습니다.")
         else:
