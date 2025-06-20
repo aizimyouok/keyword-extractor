@@ -298,39 +298,6 @@ st.markdown("""
         margin: 0 auto;
     }
     
-    /* 헤더 영역 - 간소화 */
-    .main-header {
-        margin-bottom: 2rem;
-        padding: 2rem 0;
-    }
-    
-    /* 통계 카드 영역 - 제거됨, 오른쪽 상단으로 이동 */
-    
-    /* 카드 스타일 - 간소화 */
-    .content-card {
-        background: #2a2a2a;
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin-bottom: 1.5rem;
-        border: 1px solid #333333;
-    }
-    
-    .card-title {
-        font-size: 1.3rem;
-        font-weight: 700;
-        color: #ffffff;
-        margin-bottom: 1rem;
-        display: flex;
-        align-items: center;
-    }
-    
-    .card-title .emoji {
-        margin-right: 0.8rem;
-        font-size: 1.5rem;
-    }
-    
-    /* 단계 표시기 - 제거됨 */
-    
     /* 버튼 스타일 */
     .stButton > button {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
@@ -403,107 +370,6 @@ st.markdown("""
         font-size: 1rem !important;
         color: #ffffff !important;
         margin-bottom: 0.5rem !important;
-    }
-    
-    /* 키워드 그리드 - 간소화 */
-    .keyword-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-        gap: 1rem;
-        margin: 1.5rem 0;
-    }
-    
-    .keyword-chip {
-        background: #333333;
-        border: 1px solid #404040;
-        border-radius: 12px;
-        padding: 1rem 1.2rem;
-        text-align: center;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        font-size: 0.95rem;
-        font-weight: 500;
-        color: #ffffff;
-    }
-    
-    .keyword-chip:hover {
-        border-color: #667eea;
-        background: #404040;
-        transform: translateY(-2px);
-    }
-    
-    .keyword-chip.selected {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-color: #667eea;
-        color: #ffffff;
-    }
-    
-    /* 메시지 스타일 - 간소화 */
-    
-    /* 탭 스타일 - 제거됨 */
-    
-    /* 메트릭 카드 - 간소화 */
-    
-    /* API 상태 - 제거됨 */
-    
-    /* 스크롤바 */
-    ::-webkit-scrollbar {
-        width: 8px;
-    }
-    
-    ::-webkit-scrollbar-track {
-        background: #2a2a2a;
-        border-radius: 4px;
-    }
-    
-    ::-webkit-scrollbar-thumb {
-        background: #404040;
-        border-radius: 4px;
-    }
-    
-    ::-webkit-scrollbar-thumb:hover {
-        background: #606060;
-    }
-    
-    /* 선택된 텍스트 */
-    ::selection {
-        background: rgba(102, 126, 234, 0.3);
-        color: #ffffff;
-    }
-    
-    /* 반응형 - 간소화 */
-    @media (max-width: 768px) {
-        .main .block-container {
-            padding: 1rem;
-        }
-        
-        .keyword-grid {
-            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-        }
-        
-        .content-card {
-            padding: 1rem;
-        }
-    }
-    
-    /* 애니메이션 - 간소화 */
-    @keyframes fadeInUp {
-        from { 
-            opacity: 0; 
-            transform: translateY(10px); 
-        }
-        to { 
-            opacity: 1; 
-            transform: translateY(0); 
-        }
-    }
-    
-    /* 포커스 아웃라인 제거 */
-    button:focus,
-    input:focus,
-    textarea:focus,
-    select:focus {
-        outline: none !important;
     }
     
     /* Streamlit 기본 스타일 오버라이드 */
@@ -879,40 +745,34 @@ if st.session_state.get('selected_keywords') and conn:
             help="저장할 키워드 목록입니다"
         )
 
-# 5. 저장된 키워드 관리 섹션 (토글 방식)
+# 5. 저장된 키워드 관리 섹션
 if conn:
     add_section_divider("📊 저장된 키워드 관리")
     
-    # 새로고침 버튼과 디버그 정보
+    # 컨트롤 버튼들
     col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1])
     with col1:
         if st.button("🔄 새로고침", use_container_width=True):
-            st.session_state.pop('saved_keywords_df', None)  # 캐시 클리어
-            st.session_state.pop('sheet_load_success', None)  # 성공 메시지 초기화
+            st.session_state.pop('saved_keywords_df', None)
+            st.session_state.pop('sheet_load_success', None)
             st.rerun()
     
     with col2:
         if st.button("🔍 연결 테스트", use_container_width=True):
-            if conn:
-                try:
-                    # 모든 시트 정보 확인
-                    test_df = conn.read()
-                    st.success(f"✅ 연결 성공! {len(test_df)}개 행 발견")
-                    st.info(f"컬럼: {list(test_df.columns) if not test_df.empty else '없음'}")
-                except Exception as e:
-                    st.error(f"❌ 연결 실패: {e}")
-            else:
-                st.error("❌ 구글시트 연결이 안되어 있습니다")
+            try:
+                test_df = conn.read()
+                st.success(f"✅ 연결 성공! {len(test_df)}개 행 발견")
+                st.info(f"컬럼: {list(test_df.columns) if not test_df.empty else '없음'}")
+            except Exception as e:
+                st.error(f"❌ 연결 실패: {e}")
     
     with col3:
         debug_mode = st.checkbox("🐛 디버그 모드")
     
     with col4:
-        # 키워드 목록 토글 버튼
         show_keywords = st.checkbox("📋 키워드 목록 보기", value=False)
     
     with col5:
-        # 전체 데이터 테이블 토글 버튼
         show_full_table = st.checkbox("📊 전체 테이블 보기", value=False)
     
     # 저장된 키워드 불러오기
@@ -922,7 +782,6 @@ if conn:
     if 'sheet_load_success' in st.session_state and st.session_state.get('show_connection_status', True):
         sheet_name = st.session_state['sheet_load_success']
         st.success(f"✅ {sheet_name}에서 데이터를 불러왔습니다!")
-        # 메시지 표시 후 제거
         del st.session_state['sheet_load_success']
     
     if debug_mode and not saved_df.empty:
@@ -935,16 +794,12 @@ if conn:
     if not saved_df.empty:
         st.session_state['saved_keywords_df'] = saved_df
         
-        # 키워드 목록을 토글로 표시
+        # 키워드 목록 표시
         if show_keywords:
             # 통합 검색 및 필터 시스템
-            st.markdown("""
-            <div style="background: #2a2a2a; padding: 1.5rem; border-radius: 12px; margin: 1rem 0; border: 1px solid #333333;">
-                <h4 style="color: #667eea; margin: 0 0 1rem 0; font-size: 1.1rem;">🔍 통합 검색 & 필터</h4>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown("#### 🔍 통합 검색 & 필터")
             
-            # 통합 검색창
+            # 검색창
             search_query = st.text_input(
                 "🔍 통합 검색",
                 placeholder="키워드명, 프로젝트명, 메모에서 검색...",
@@ -962,11 +817,9 @@ if conn:
                 usage_filter = st.selectbox("✅ 사용여부", ['전체', '사용함(✅)', '미사용(❌)'])
             
             with filter_col3:
-                # 날짜 필터
                 date_filter = st.selectbox("📅 등록일", ['전체', '오늘', '최근 3일', '최근 일주일', '최근 한달'])
             
             with filter_col4:
-                # 정렬 옵션
                 sort_option = st.selectbox("🔄 정렬", ['최신순', '오래된순', '키워드명 순', '프로젝트명 순'])
             
             # 필터 적용
@@ -991,7 +844,7 @@ if conn:
             elif usage_filter == '미사용(❌)':
                 filtered_df = filtered_df[filtered_df['사용여부'] == '❌']
             
-            # 날짜 필터
+            # 날짜 필터 (간단화)
             if date_filter != '전체':
                 from datetime import datetime, timedelta
                 today = datetime.now()
@@ -999,15 +852,6 @@ if conn:
                 if date_filter == '오늘':
                     target_date = today.strftime('%Y-%m-%d')
                     filtered_df = filtered_df[filtered_df['날짜'].str.contains(target_date, na=False)]
-                elif date_filter == '최근 3일':
-                    target_date = (today - timedelta(days=3)).strftime('%Y-%m-%d')
-                    filtered_df = filtered_df[filtered_df['날짜'] >= target_date]
-                elif date_filter == '최근 일주일':
-                    target_date = (today - timedelta(days=7)).strftime('%Y-%m-%d')
-                    filtered_df = filtered_df[filtered_df['날짜'] >= target_date]
-                elif date_filter == '최근 한달':
-                    target_date = (today - timedelta(days=30)).strftime('%Y-%m-%d')
-                    filtered_df = filtered_df[filtered_df['날짜'] >= target_date]
             
             # 정렬 적용
             if sort_option == '최신순':
@@ -1034,187 +878,91 @@ if conn:
                 usage_rate = (used_keywords / total_keywords * 100) if total_keywords > 0 else 0
                 st.metric("📊 사용률", f"{usage_rate:.1f}%")
             
-            # 키워드 목록 표시 (테이블 형태로 깔끔하게)
+            # 키워드 목록 표시
             st.markdown("#### 📝 키워드 목록")
             
             if not filtered_df.empty:
-                # 페이지네이션
-                items_per_page = 20
-                total_items = len(filtered_df)
-                total_pages = (total_items - 1) // items_per_page + 1 if total_items > 0 else 1
-                
-                if 'keyword_page' not in st.session_state:
-                    st.session_state['keyword_page'] = 1
-                
-                # 페이지 컨트롤
-                if total_pages > 1:
-                    page_col1, page_col2, page_col3, page_col4 = st.columns([1, 1, 2, 1])
-                    
-                    with page_col1:
-                        if st.button("⬅️ 이전", disabled=st.session_state['keyword_page'] <= 1, key="prev_keyword_page"):
-                            st.session_state['keyword_page'] -= 1
-                            st.rerun()
-                    
-                    with page_col2:
-                        if st.button("➡️ 다음", disabled=st.session_state['keyword_page'] >= total_pages, key="next_keyword_page"):
-                            st.session_state['keyword_page'] += 1
-                            st.rerun()
-                    
-                    with page_col3:
-                        st.markdown(f"""
-                        <div style="text-align: center; padding: 0.5rem; color: #b0b0b0;">
-                            페이지 {st.session_state['keyword_page']} / {total_pages} 
-                        </div>
-                        """, unsafe_allow_html=True)
-                    
-                    with page_col4:
-                        if st.button("🔄", help="새로고침", key="refresh_keyword_list"):
-                            st.rerun()
-                
-                # 현재 페이지 데이터
-                start_idx = (st.session_state['keyword_page'] - 1) * items_per_page
-                end_idx = start_idx + items_per_page
-                current_page_df = filtered_df.iloc[start_idx:end_idx]
-                
-                # 테이블 헤더
-                st.markdown("""
-                <div style="background: #333333; padding: 0.8rem; border-radius: 8px; margin-bottom: 0.5rem;">
-                    <div style="display: grid; grid-template-columns: 2fr 1.5fr 1fr 1fr 2fr 1fr; gap: 1rem; font-weight: 600; color: #ffffff; font-size: 0.9rem;">
-                        <div>🔑 키워드</div>
-                        <div>📁 프로젝트</div>
-                        <div>📅 등록일</div>
-                        <div>✅ 사용여부</div>
-                        <div>📝 메모</div>
-                        <div style="text-align: center;">⚙️ 관리</div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # 키워드 목록 (한 줄씩 깔끔하게)
-                for idx, row in current_page_df.iterrows():
+                # 간단한 키워드 목록 표시
+                for idx, row in filtered_df.iterrows():
                     original_idx = saved_df.index[saved_df['키워드'] == row['키워드']].tolist()[0]
                     
-                    # 배경색 설정 (홀수/짝수 구분)
-                    bg_color = "#2a2a2a" if idx % 2 == 0 else "#252525"
+                    # 키워드 정보 표시
+                    col1, col2, col3, col4 = st.columns([2, 1, 2, 1])
                     
-                    with st.container():
-                        st.markdown(f"""
-                        <div style="background: {bg_color}; padding: 0.8rem; border-radius: 8px; margin-bottom: 0.3rem;">
-                        """, unsafe_allow_html=True)
+                    with col1:
+                        st.markdown(f"**🔑 {row['키워드']}**")
+                        st.caption(f"📁 {row['프로젝트명']} | 📅 {str(row['날짜']).split()[0] if ' ' in str(row['날짜']) else row['날짜']}")
+                    
+                    with col2:
+                        current_status = row['사용여부'] == '✅'
+                        new_status = st.checkbox(
+                            "사용완료",
+                            value=current_status,
+                            key=f"status_check_{original_idx}"
+                        )
+                    
+                    with col3:
+                        current_memo = row.get('메모', '')
+                        new_memo = st.text_input(
+                            "메모", 
+                            value=current_memo,
+                            key=f"memo_input_{original_idx}",
+                            placeholder="메모를 입력하세요...",
+                            label_visibility="collapsed"
+                        )
+                    
+                    with col4:
+                        # 액션 버튼들
+                        action_col1, action_col2 = st.columns(2)
                         
-                        # 그리드 레이아웃으로 한 줄에 모든 정보 표시
-                        col1, col2, col3, col4, col5, col6 = st.columns([2, 1.5, 1, 1, 2, 1])
-                        
-                        with col1:
-                            st.markdown(f"**{row['키워드']}**")
-                        
-                        with col2:
-                            st.markdown(f"{row['프로젝트명']}")
-                        
-                        with col3:
-                            date_str = str(row['날짜']).split()[0] if ' ' in str(row['날짜']) else row['날짜']
-                            st.markdown(f"{date_str}")
-                        
-                        with col4:
-                            current_status = row['사용여부'] == '✅'
-                            new_status = st.checkbox(
-                                "사용완료",
-                                value=current_status,
-                                key=f"status_check_{original_idx}",
-                                label_visibility="collapsed"
-                            )
-                        
-                        with col5:
-                            current_memo = row.get('메모', '')
-                            new_memo = st.text_input(
-                                "메모", 
-                                value=current_memo,
-                                key=f"memo_input_{original_idx}",
-                                placeholder="메모를 입력하세요...",
-                                label_visibility="collapsed"
-                            )
-                        
-                        with col6:
-                            # 액션 버튼들
-                            action_col1, action_col2 = st.columns(2)
-                            
-                            with action_col1:
-                                if st.button("💾", key=f"save_btn_{original_idx}", help="저장", use_container_width=True):
-                                    if new_status != current_status or new_memo != current_memo:
-                                        success = update_keyword_usage(conn, original_idx, new_status, new_memo)
-                                        if success:
-                                            st.success("✅ 저장 완료!")
-                                            # 강제 캐시 클리어 및 데이터 다시 로드
-                                            st.session_state.pop('saved_keywords_df', None)
-                                            updated_df = load_keywords_from_sheet(conn)
-                                            if not updated_df.empty:
-                                                st.session_state['saved_keywords_df'] = updated_df
-                                                st.session_state['existing_keywords'] = set(updated_df['키워드'].tolist())
-                                            time.sleep(0.3)
-                                            st.rerun()
-                                        else:
-                                            st.error("❌ 저장 실패")
-                                    else:
-                                        st.info("변경사항 없음")
-                            
-                            with action_col2:
-                                if st.button("🗑️", key=f"delete_btn_{original_idx}", help="삭제", use_container_width=True):
-                                    if st.session_state.get(f"confirm_delete_{original_idx}", False):
-                                        success = delete_keyword_from_sheet(conn, original_idx)
-                                        if success:
-                                            st.success(f"✅ '{row['키워드']}' 삭제됨!")
-                                            # 강제로 모든 캐시 클리어
-                                            for key in list(st.session_state.keys()):
-                                                if 'saved_keywords' in key or 'existing_keywords' in key:
-                                                    del st.session_state[key]
-                                            time.sleep(0.5)
-                                            updated_df = load_keywords_from_sheet(conn)
-                                            if not updated_df.empty:
-                                                st.session_state['saved_keywords_df'] = updated_df
-                                                st.session_state['existing_keywords'] = set(updated_df['키워드'].tolist())
-                                            else:
-                                                st.session_state['existing_keywords'] = set()
-                                                st.session_state['saved_keywords_df'] = pd.DataFrame()
-                                            st.session_state[f"confirm_delete_{original_idx}"] = False
-                                            st.rerun()
-                                        else:
-                                            st.error("❌ 삭제 실패")
-                                            st.session_state[f"confirm_delete_{original_idx}"] = False
-                                    else:
-                                        st.session_state[f"confirm_delete_{original_idx}"] = True
-                                        st.warning(f"⚠️ 삭제 확인: 다시 클릭")
-                                        time.sleep(1)
+                        with action_col1:
+                            if st.button("💾", key=f"save_btn_{original_idx}", help="저장", use_container_width=True):
+                                if new_status != current_status or new_memo != current_memo:
+                                    success = update_keyword_usage(conn, original_idx, new_status, new_memo)
+                                    if success:
+                                        st.success("✅ 저장 완료!")
+                                        st.session_state.pop('saved_keywords_df', None)
                                         st.rerun()
+                                    else:
+                                        st.error("❌ 저장 실패")
+                                else:
+                                    st.info("변경사항 없음")
                         
-                        st.markdown("</div>", unsafe_allow_html=True)
-                
-                # 페이지 정보 하단 표시
-                if total_pages > 1:
-                    st.markdown(f"""
-                    <div style="text-align: center; margin-top: 1rem; padding: 0.5rem; 
-                                background: #2a2a2a; border-radius: 8px; color: #b0b0b0;">
-                        {start_idx + 1}~{min(end_idx, total_items)}번째 표시 중 (전체 {total_items}개)
-                    </div>
-                    """, unsafe_allow_html=True)
+                        with action_col2:
+                            if st.button("🗑️", key=f"delete_btn_{original_idx}", help="삭제", use_container_width=True):
+                                if st.session_state.get(f"confirm_delete_{original_idx}", False):
+                                    success = delete_keyword_from_sheet(conn, original_idx)
+                                    if success:
+                                        st.success(f"✅ '{row['키워드']}' 삭제됨!")
+                                        st.session_state.pop('saved_keywords_df', None)
+                                        st.session_state[f"confirm_delete_{original_idx}"] = False
+                                        st.rerun()
+                                    else:
+                                        st.error("❌ 삭제 실패")
+                                        st.session_state[f"confirm_delete_{original_idx}"] = False
+                                else:
+                                    st.session_state[f"confirm_delete_{original_idx}"] = True
+                                    st.warning(f"⚠️ 삭제 확인: 다시 클릭")
+                    
+                    st.markdown("---")
             else:
                 st.info(f"📝 '{search_query}' 검색 결과가 없습니다." if search_query else "📝 필터 조건에 맞는 키워드가 없습니다.")
         
-        # 전체 데이터 테이블 (별도 섹션으로 분리)
+        # 전체 데이터 테이블
         if show_full_table:
             add_section_divider("📊 전체 데이터 테이블")
             
-            # 페이지네이션 설정
+            # 페이지네이션
             items_per_page = 30
             total_items = len(saved_df)
             total_pages = (total_items - 1) // items_per_page + 1 if total_items > 0 else 1
             
-            # 페이지 번호 초기화
             if 'current_page' not in st.session_state:
                 st.session_state['current_page'] = 1
             
             # 페이지 컨트롤
             if total_pages > 1:
-                col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
+                col1, col2, col3 = st.columns([1, 2, 1])
                 
                 with col1:
                     if st.button("⬅️ 이전", disabled=st.session_state['current_page'] <= 1):
@@ -1222,11 +970,6 @@ if conn:
                         st.rerun()
                 
                 with col2:
-                    if st.button("➡️ 다음", disabled=st.session_state['current_page'] >= total_pages):
-                        st.session_state['current_page'] += 1
-                        st.rerun()
-                
-                with col3:
                     st.markdown(f"""
                     <div style="text-align: center; padding: 0.5rem; color: #b0b0b0;">
                         페이지 {st.session_state['current_page']} / {total_pages} 
@@ -1234,24 +977,12 @@ if conn:
                     </div>
                     """, unsafe_allow_html=True)
                 
-                with col4:
-                    # 페이지 직접 이동
-                    page_input = st.number_input(
-                        "페이지", 
-                        min_value=1, 
-                        max_value=total_pages, 
-                        value=st.session_state['current_page'],
-                        key="page_input"
-                    )
-                    if page_input != st.session_state['current_page']:
-                        st.session_state['current_page'] = page_input
-                        st.rerun()
-                
-                with col5:
-                    if st.button("🔄", help="새로고침"):
+                with col3:
+                    if st.button("➡️ 다음", disabled=st.session_state['current_page'] >= total_pages):
+                        st.session_state['current_page'] += 1
                         st.rerun()
             
-            # 현재 페이지 데이터 계산
+            # 현재 페이지 데이터
             start_idx = (st.session_state['current_page'] - 1) * items_per_page
             end_idx = start_idx + items_per_page
             current_page_df = saved_df.iloc[start_idx:end_idx]
@@ -1261,27 +992,8 @@ if conn:
                 st.dataframe(
                     current_page_df,
                     use_container_width=True,
-                    hide_index=False,
-                    column_config={
-                        '날짜': st.column_config.DatetimeColumn('날짜', width="medium"),
-                        '프로젝트명': st.column_config.TextColumn('프로젝트명', width="medium"),
-                        '키워드': st.column_config.TextColumn('키워드', width="large"),
-                        '사용여부': st.column_config.TextColumn('사용여부', width="small"),
-                        '메모': st.column_config.TextColumn('메모', width="large")
-                    }
+                    hide_index=False
                 )
-                
-                # 페이지 정보 하단에도 표시
-                if total_pages > 1:
-                    st.markdown(f"""
-                    <div style="text-align: center; margin-top: 1rem; padding: 0.5rem; 
-                                background: #2a2a2a; border-radius: 8px; color: #b0b0b0;">
-                        {start_idx + 1}~{min(end_idx, total_items)}번째 항목 표시 중 
-                        (전체 {total_items}개 중 {len(current_page_df)}개)
-                    </div>
-                    """, unsafe_allow_html=True)
-            else:
-                st.info("📝 해당 페이지에 표시할 데이터가 없습니다.")
         
         if not show_keywords and not show_full_table:
             st.info(f"💡 총 {len(saved_df)}개의 키워드가 저장되어 있습니다. '📋 키워드 목록 보기' 또는 '📊 전체 테이블 보기'를 체크하여 확인하세요.")
@@ -1297,107 +1009,6 @@ if conn:
         """)
 else:
     st.warning("⚠️ 구글시트 연결을 확인해주세요. secrets.toml 파일에 인증 정보가 설정되어 있나요?")
-            else:
-                st.info("📝 필터 조건에 맞는 키워드가 없습니다.")
-        else:
-            st.info(f"💡 총 {len(saved_df)}개의 키워드가 저장되어 있습니다. '📋 키워드 목록 보기'를 체크하여 확인하세요.")
-        
-        # 전체 데이터 테이블 (별도 섹션으로 분리)
-        if show_full_table:
-            add_section_divider("📊 전체 데이터 테이블")
-            
-            # 페이지네이션 설정
-            items_per_page = 30
-            total_items = len(saved_df)
-            total_pages = (total_items - 1) // items_per_page + 1 if total_items > 0 else 1
-            
-            # 페이지 번호 초기화
-            if 'current_page' not in st.session_state:
-                st.session_state['current_page'] = 1
-            
-            # 페이지 컨트롤
-            if total_pages > 1:
-                col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
-                
-                with col1:
-                    if st.button("⬅️ 이전", disabled=st.session_state['current_page'] <= 1):
-                        st.session_state['current_page'] -= 1
-                        st.rerun()
-                
-                with col2:
-                    if st.button("➡️ 다음", disabled=st.session_state['current_page'] >= total_pages):
-                        st.session_state['current_page'] += 1
-                        st.rerun()
-                
-                with col3:
-                    st.markdown(f"""
-                    <div style="text-align: center; padding: 0.5rem; color: #b0b0b0;">
-                        페이지 {st.session_state['current_page']} / {total_pages} 
-                        (총 {total_items}개 항목)
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with col4:
-                    # 페이지 직접 이동
-                    page_input = st.number_input(
-                        "페이지", 
-                        min_value=1, 
-                        max_value=total_pages, 
-                        value=st.session_state['current_page'],
-                        key="page_input"
-                    )
-                    if page_input != st.session_state['current_page']:
-                        st.session_state['current_page'] = page_input
-                        st.rerun()
-                
-                with col5:
-                    if st.button("🔄", help="새로고침"):
-                        st.rerun()
-            
-            # 현재 페이지 데이터 계산
-            start_idx = (st.session_state['current_page'] - 1) * items_per_page
-            end_idx = start_idx + items_per_page
-            current_page_df = saved_df.iloc[start_idx:end_idx]
-            
-            # 데이터프레임 표시
-            if not current_page_df.empty:
-                st.dataframe(
-                    current_page_df,
-                    use_container_width=True,
-                    hide_index=False,
-                    column_config={
-                        '날짜': st.column_config.DatetimeColumn('날짜', width="medium"),
-                        '프로젝트명': st.column_config.TextColumn('프로젝트명', width="medium"),
-                        '키워드': st.column_config.TextColumn('키워드', width="large"),
-                        '사용여부': st.column_config.TextColumn('사용여부', width="small"),
-                        '메모': st.column_config.TextColumn('메모', width="large")
-                    }
-                )
-                
-                # 페이지 정보 하단에도 표시
-                if total_pages > 1:
-                    st.markdown(f"""
-                    <div style="text-align: center; margin-top: 1rem; padding: 0.5rem; 
-                                background: #2a2a2a; border-radius: 8px; color: #b0b0b0;">
-                        {start_idx + 1}~{min(end_idx, total_items)}번째 항목 표시 중 
-                        (전체 {total_items}개 중 {len(current_page_df)}개)
-                    </div>
-                    """, unsafe_allow_html=True)
-            else:
-                st.info("📝 해당 페이지에 표시할 데이터가 없습니다.")
-        
-    else:
-        st.info("📝 아직 저장된 키워드가 없습니다. 키워드를 추출하고 저장해보세요!")
-        
-        if conn:
-            st.markdown("""
-            **💡 저장된 키워드가 안 보인다면:**
-            - 구글시트에 데이터가 있는지 확인해보세요
-            - 새로고침 버튼을 눌러보세요  
-            - 구글시트의 시트 이름을 확인해보세요 (권장: "키워드관리")
-            """)
-        else:
-            st.warning("⚠️ 구글시트 연결을 확인해주세요.")
 
 # 푸터
 add_section_divider()
