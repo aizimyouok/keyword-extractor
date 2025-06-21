@@ -82,6 +82,8 @@ def save_keywords_to_sheet(conn, project_name, keywords_list):
                 '프로젝트명': project_name,
                 '키워드': keyword,
                 '사용여부': '❌',
+                '티스토리작성': '❌',
+                '블로그스팟작성': '❌',
                 '메모': ''
             })
         
@@ -109,6 +111,12 @@ def save_keywords_to_sheet(conn, project_name, keywords_list):
         
         # 기존 데이터와 병합
         if not existing_df.empty:
+            # 기존 데이터에 새로운 컬럼이 없으면 추가
+            if '티스토리작성' not in existing_df.columns:
+                existing_df['티스토리작성'] = '❌'
+            if '블로그스팟작성' not in existing_df.columns:
+                existing_df['블로그스팟작성'] = '❌'
+            
             updated_df = pd.concat([existing_df, new_df], ignore_index=True)
         else:
             updated_df = new_df
@@ -152,6 +160,12 @@ def load_keywords_from_sheet(conn, force_refresh=False):
                 
                 # 데이터가 있고 필요한 컬럼이 있는지 확인
                 if not df.empty and '키워드' in df.columns:
+                    # 새로운 컬럼이 없으면 기본값으로 추가
+                    if '티스토리작성' not in df.columns:
+                        df['티스토리작성'] = '❌'
+                    if '블로그스팟작성' not in df.columns:
+                        df['블로그스팟작성'] = '❌'
+                    
                     # 강제 새로고침이 아닌 경우에만 성공 메시지 저장
                     if not force_refresh and 'sheet_load_success' not in st.session_state:
                         st.session_state['sheet_load_success'] = f"시트 '{sheet_name or '첫번째 시트'}'"
@@ -170,8 +184,8 @@ def load_keywords_from_sheet(conn, force_refresh=False):
             st.error(f"❌ 구글시트 연결 오류: {e}")
         return pd.DataFrame()
 
-def update_keyword_usage(conn, original_index, used_status, memo=""):
-    """키워드 사용여부 업데이트 (인덱스 문제 해결)"""
+def update_keyword_usage(conn, original_index, used_status, tistory_status=False, blogspot_status=False, memo=""):
+    """키워드 사용여부 및 블로그 작성 상태 업데이트"""
     if not conn:
         return False
     
@@ -189,6 +203,16 @@ def update_keyword_usage(conn, original_index, used_status, memo=""):
                 if not df.empty and '키워드' in df.columns and original_index < len(df):
                     # 사용여부 업데이트
                     df.loc[original_index, '사용여부'] = '✅' if used_status else '❌'
+                    
+                    # 티스토리 작성 상태 업데이트
+                    if '티스토리작성' not in df.columns:
+                        df['티스토리작성'] = '❌'
+                    df.loc[original_index, '티스토리작성'] = '✅' if tistory_status else '❌'
+                    
+                    # 블로그스팟 작성 상태 업데이트
+                    if '블로그스팟작성' not in df.columns:
+                        df['블로그스팟작성'] = '❌'
+                    df.loc[original_index, '블로그스팟작성'] = '✅' if blogspot_status else '❌'
                     
                     # 메모 업데이트
                     if memo:
@@ -208,7 +232,7 @@ def update_keyword_usage(conn, original_index, used_status, memo=""):
         return False
         
     except Exception as e:
-        st.error(f"❌ 사용여부 업데이트 실패: {e}")
+        st.error(f"❌ 업데이트 실패: {e}")
         return False
 
 def delete_keyword_from_sheet(conn, original_index):
@@ -803,7 +827,7 @@ if conn:
         )
         
         # 필터 옵션들
-        filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(4)
+        filter_col1, filter_col2, filter_col3, filter_col4, filter_col5, filter_col6 = st.columns(6)
         
         with filter_col1:
             projects = ['전체'] + list(saved_df['프로젝트명'].unique())
@@ -813,9 +837,21 @@ if conn:
             usage_filter = st.selectbox("✅ 사용여부", ['전체', '사용함(✅)', '미사용(❌)'])
         
         with filter_col3:
-            date_filter = st.selectbox("📅 등록일", ['전체', '오늘', '최근 3일', '최근 일주일', '최근 한달'])
+            # 티스토리작성 컬럼이 없으면 기본값 추가
+            if '티스토리작성' not in saved_df.columns:
+                saved_df['티스토리작성'] = '❌'
+            tistory_filter = st.selectbox("📝 티스토리", ['전체', '작성함(✅)', '미작성(❌)'])
         
         with filter_col4:
+            # 블로그스팟작성 컬럼이 없으면 기본값 추가
+            if '블로그스팟작성' not in saved_df.columns:
+                saved_df['블로그스팟작성'] = '❌'
+            blogspot_filter = st.selectbox("📰 블로그스팟", ['전체', '작성함(✅)', '미작성(❌)'])
+        
+        with filter_col5:
+            date_filter = st.selectbox("📅 등록일", ['전체', '오늘', '최근 3일', '최근 일주일', '최근 한달'])
+        
+        with filter_col6:
             sort_option = st.selectbox("🔄 정렬", ['최신순', '오래된순', '키워드명 순', '프로젝트명 순'])
         
         # 필터 적용
@@ -840,6 +876,18 @@ if conn:
         elif usage_filter == '미사용(❌)':
             filtered_df = filtered_df[filtered_df['사용여부'] == '❌']
         
+        # 티스토리 작성 필터
+        if tistory_filter == '작성함(✅)':
+            filtered_df = filtered_df[filtered_df['티스토리작성'] == '✅']
+        elif tistory_filter == '미작성(❌)':
+            filtered_df = filtered_df[filtered_df['티스토리작성'] == '❌']
+        
+        # 블로그스팟 작성 필터
+        if blogspot_filter == '작성함(✅)':
+            filtered_df = filtered_df[filtered_df['블로그스팟작성'] == '✅']
+        elif blogspot_filter == '미작성(❌)':
+            filtered_df = filtered_df[filtered_df['블로그스팟작성'] == '❌']
+        
         # 날짜 필터 (간단화)
         if date_filter != '전체':
             from datetime import datetime, timedelta
@@ -860,7 +908,7 @@ if conn:
             filtered_df = filtered_df.sort_values('프로젝트명', ascending=True)
         
         # 통계 정보 표시
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4, col5, col6 = st.columns(6)
         with col1:
             st.metric("🔍 검색 결과", f"{len(filtered_df)}개")
         with col2:
@@ -873,6 +921,12 @@ if conn:
         with col4:
             usage_rate = (used_keywords / total_keywords * 100) if total_keywords > 0 else 0
             st.metric("📊 사용률", f"{usage_rate:.1f}%")
+        with col5:
+            tistory_written = len(filtered_df[filtered_df.get('티스토리작성', '❌') == '✅'])
+            st.metric("📝 티스토리", f"{tistory_written}개")
+        with col6:
+            blogspot_written = len(filtered_df[filtered_df.get('블로그스팟작성', '❌') == '✅'])
+            st.metric("📰 블로그스팟", f"{blogspot_written}개")
         
         # 컨트롤 버튼들 (작게 배치)
         st.markdown("#### 🎛️ 컨트롤")
@@ -954,7 +1008,7 @@ if conn:
                     original_idx = saved_df.index[saved_df['키워드'] == row['키워드']].tolist()[0]
                     
                     # 키워드 정보 표시
-                    col1, col2, col3, col4 = st.columns([2, 1, 2, 1])
+                    col1, col2, col3, col4, col5, col6 = st.columns([3, 1, 1, 1, 3, 1])
                     
                     with col1:
                         st.markdown(f"**🔑 {row['키워드']}**")
@@ -969,6 +1023,22 @@ if conn:
                         )
                     
                     with col3:
+                        current_tistory = row.get('티스토리작성', '❌') == '✅'
+                        new_tistory = st.checkbox(
+                            "티스토리",
+                            value=current_tistory,
+                            key=f"tistory_check_{original_idx}"
+                        )
+                    
+                    with col4:
+                        current_blogspot = row.get('블로그스팟작성', '❌') == '✅'
+                        new_blogspot = st.checkbox(
+                            "블로그스팟",
+                            value=current_blogspot,
+                            key=f"blogspot_check_{original_idx}"
+                        )
+                    
+                    with col5:
                         current_memo = row.get('메모', '')
                         new_memo = st.text_input(
                             "메모", 
@@ -978,14 +1048,17 @@ if conn:
                             label_visibility="collapsed"
                         )
                     
-                    with col4:
+                    with col6:
                         # 액션 버튼들
                         action_col1, action_col2 = st.columns(2)
                         
                         with action_col1:
                             if st.button("💾", key=f"save_btn_{original_idx}", help="저장", use_container_width=True):
-                                if new_status != current_status or new_memo != current_memo:
-                                    success = update_keyword_usage(conn, original_idx, new_status, new_memo)
+                                if (new_status != current_status or 
+                                    new_tistory != current_tistory or 
+                                    new_blogspot != current_blogspot or 
+                                    new_memo != current_memo):
+                                    success = update_keyword_usage(conn, original_idx, new_status, new_tistory, new_blogspot, new_memo)
                                     if success:
                                         st.success("✅ 저장 완료!")
                                         
